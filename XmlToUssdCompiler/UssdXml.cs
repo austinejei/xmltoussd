@@ -1,17 +1,20 @@
 using System;
-using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Xml;
-using System.Xml.Schema;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Scripting;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using XmlToUssdCompiler.ScriptModels;
 
 namespace XmlToUssdCompiler
 {
@@ -29,7 +32,22 @@ namespace XmlToUssdCompiler
         private XmlDocument _doc;
         private void ReadFile()
         {
-           
+           var fileInfo = new FileInfo(Filename);
+
+            if (!fileInfo.Exists)
+            {
+                throw new FileNotFoundException($"file, {Filename}, not found on disk.");
+            }
+
+            if (!".xml".Equals(fileInfo.Extension,StringComparison.CurrentCultureIgnoreCase))
+            {
+                throw new Exception("only *.xml files allowed");
+            }
+
+            if (fileInfo.Length<=0)
+            {
+                throw new Exception("file is empty");
+            }
             _doc= new XmlDocument();
             
             _doc.Load(Filename);
@@ -41,7 +59,7 @@ namespace XmlToUssdCompiler
             return _screens;
         }
 
-        public Dictionary<string, Dictionary<string, string>> GetBoundModels()
+        public Dictionary<string, dynamic> GetBoundModels()
         {
             return _boundModels;
         }
@@ -66,392 +84,500 @@ namespace XmlToUssdCompiler
             return _actions;
         }
 
+        public List<UssdScript> GetScripts()
+        {
+            return _scripts;
+        }
+
         List<UssdScreen> _screens;
+        List<UssdScript> _scripts;
         List<UssdAction> _actions;
         List<UssdFormList> _formLists;
         List<UssdForm> _forms;
         List<UssdMenu> _menus;
-        Dictionary<string,Dictionary<string,string>> _boundModels;
+        Dictionary<string,dynamic> _boundModels;
         public void Parse(bool simulator=true)
         {
             var rootNode = _doc.SelectNodes("ussd");
            
             _screens = new List<UssdScreen>();
+            _scripts = new List<UssdScript>();
             _actions = new List<UssdAction>();
             _formLists = new List<UssdFormList>();
             _forms = new List<UssdForm>();
             _menus = new List<UssdMenu>();
-            _boundModels = new  Dictionary<string, Dictionary<string, string>>();
+            _boundModels = new  Dictionary<string, dynamic>();
+
+
+            if (rootNode==null)
+            {
+                throw new Exception("no \"ussd\" element found");
+            }
+
+            //gather scripts
             foreach (XmlNode node in rootNode)
             {
-                foreach (XmlNode screen in node.ChildNodes)
+                foreach (XmlNode ussdElement in node.ChildNodes)
                 {
-
-                    if (screen.Attributes["id"]==null)
+                    if (ussdElement.Name == "script")
                     {
-                        throw new Exception("screen id is required");
-                    }
-                    var screenId = screen.Attributes["id"].InnerText;
-                    Console.WriteLine("gotten screen {0}",screenId);
-                    if (_screens.Any(s=>s.Id==screenId))
-                    {
-                        throw new Exception("screen id already exists at {0}");
-                    }
-
-                    var ussdScreen = new UssdScreen
-                                     {
-                                         Id = screenId
-                                     };
-
-                    foreach (XmlNode screenItem in screen.ChildNodes)
-                    {
-                        if (screenItem.Name.Equals("menu"))
+                        if (ussdElement.Attributes.GetNamedItem("id") == null)
                         {
-                            var menuNodes = screenItem.ChildNodes;
-
-                            var ussdMenu = new UssdMenu();
-                            if (screenItem.Attributes.Count>0)
-                            {
-                                if (screenItem.Attributes["bindfrom"]!=null)
-                                {
-                                    //todo: always check if there's a corresponding bindto in another screen
-                                    ussdMenu.BindFrom = new UssdBoundModel
-                                                        {
-                                                            Name = screenItem.Attributes["bindfrom"].InnerText
-                                                        };
-                             
-                                }
-                                if (screenItem.Attributes["bindaction"] != null)
-                                {
-                             
-                                    ussdMenu.BindAction = new UssdBoundAction
-                                    {
-                                        Name = screenItem.Attributes["bindaction"].InnerText
-                                    };
-
-                                }
-                              
-                            }
-
-                            foreach (XmlNode menuNode in menuNodes)
-                            {
-
-                                if (menuNode.Name=="title")
-                                {
-                                    ussdMenu.Title = menuNode.InnerText.ToUssdString(simulator);
-                                }
-
-                                if (menuNode.Name=="option")
-                                {
-                                    var menuOption = new UssdMenuOption
-                                                     {
-                                                         Text = menuNode.InnerText,
-                                                         Value = menuNode.Attributes["value"].InnerText.ToUssdString(simulator),
-                                                         OnSelect = new UssdNavigator(menuNode.Attributes["onselect"].InnerText)
-                                                     };
-
-                                    ussdMenu.Options.Add(menuOption);
-
-
-                                }
-                            }
-
-
-                            ussdScreen.UssdItems.Add(ussdMenu);
-                            _menus.Add(ussdMenu);
-                            Console.WriteLine("added menu {0}",ussdMenu.Title);
-                        }
-                        if (screenItem.Name.Equals("form"))
-                        {
-                            var formNodes = screenItem.ChildNodes;
-
-                            var ussdForm = new UssdForm();
-                            if (screenItem.Attributes.Count > 0)
-                            {
-                                if (screenItem.Attributes["bindto"] != null)
-                                {
-                                    ussdForm.BindTo = new UssdBoundModel
-                                                      {
-                                                          Name = screenItem.Attributes["bindto"].InnerText
-                                                      };
-                                    _boundModels[screenItem.Attributes["bindto"].InnerText] = new Dictionary<string, string>();
-                                                     
-                                }
-                                if (screenItem.Attributes["onsubmit"] != null)
-                                {
-                                    ussdForm.OnSubmit = new UssdNavigator(screenItem.Attributes["onsubmit"].InnerText);
-                                    
-                                } 
-                                else
-                                {
-                                    throw new Exception("form attribute bindto is required");
-                                }
-
-
-                            }
-
-                            foreach (XmlNode formNode in formNodes)
-                            {
-
-                                if (formNode.Name == "title")
-                                {
-                                    ussdForm.Title = formNode.InnerText.ToUssdString(simulator);
-                                }
-
-                                if (formNode.Name == "input")
-                                {
-                                    var ussdFormInput = new UssdFormInput
-                                                     {
-
-                                                         Id = formNode.Attributes["id"].InnerText,
-                                                         Type = formNode.Attributes["type"].InnerText,
-                                                         Display = formNode.Attributes["display"].Value.ToUssdString(simulator),
-                                                         Required =
-                                                             bool.Parse(formNode.Attributes["required"].InnerText),
-                                                         MaxLength = formNode.Attributes["maxlength"]==null?(int?)null:int.Parse(formNode.Attributes["maxlength"].InnerText)
-                                                     };
-
-                                    if (ussdFormInput.Type=="list")
-                                    {
-                                        ussdFormInput.IsList = true;
-                                        ussdFormInput.ListId = formNode.Attributes["listid"].InnerText;
-                                    }
-
-                                    ussdForm.Inputs.Add(ussdFormInput);
-
-
-                                }
-                                if (formNode.Name=="list")
-                                {
-                                    var formListNodes = formNode.ChildNodes;
-
-                                    var ussdFormList = new UssdFormList {Id = formNode.Attributes["id"].InnerText};
-                                    foreach (XmlNode formListNode in formListNodes)
-                                    {
-                                        ussdFormList.Choices.Add(new UssdFormListChoice
-                                        {
-                                            Text = formListNode.InnerText,
-                                            Selector=formListNode.Attributes["selector"].InnerText,
-                                            Value=formListNode.Attributes["value"].InnerText
-                                        });
-                                    }
-                                    _formLists.Add(ussdFormList);
-
-                                }
-                            }
-
-
-                            ussdScreen.UssdItems.Add(ussdForm);
-                            _forms.Add(ussdForm);
-
-                            Console.WriteLine("added form {0}", ussdForm.Title);
-                        }
-                        if (screenItem.Name.Equals("text"))
-                        {
-                            var ussdText = new UssdText(screenItem.InnerText.ToUssdString(simulator));
-                            if (screenItem.Attributes.Count > 0)
-                            {
-                                if (screenItem.Attributes["bindfrom"] != null)
-                                {
-                                    //todo: always check if there's a corresponding bindto in another screen
-                                    ussdText.BindFrom = new UssdBoundModel
-                                                        {
-                                                            Name = screenItem.Attributes["bindfrom"].InnerText
-                                                        };
-
-                                }
-                                if (screenItem.Attributes["bindaction"] != null)
-                                {
-
-                                    ussdText.BindAction = new UssdBoundAction
-                                    {
-                                        Name = screenItem.Attributes["bindaction"].InnerText
-                                    };
-
-                                }
-
-                            }
-                            ussdScreen.UssdItems.Add(ussdText);
+                            throw new Exception("script attribute \"id\" is required");
                         }
 
+                       
+                        var scriptId = ussdElement.Attributes["id"].InnerText;
 
-                        if (screenItem.Name.Equals("action"))
+                        Console.WriteLine("gotten script {0}", scriptId);
+                        if (_screens.Any(s => s.Id == scriptId))
                         {
-                            var actionNode = screenItem.ChildNodes;
-
-                            var ussdAction = new UssdAction();
-                            if (screenItem.Attributes.Count > 0)
-                            {
-                                if (screenItem.Attributes["id"] != null)
-                                {
-                                    ussdAction.Id = screenItem.Attributes["id"].InnerText;
-
-                                }
-                                else
-                                {
-                                    throw new Exception("action attribute id is required");
-                                }
-
-                                if (screenItem.Attributes["bindto"] != null)
-                                {
-                                    ussdAction.BindTo = new UssdBoundModel
-                                    {
-                                        Name = screenItem.Attributes["bindto"].InnerText
-                                    };
-                                    _boundModels[screenItem.Attributes["bindto"].InnerText] = new Dictionary<string, string>();
-
-                                }
-                                else
-                                {
-                                    throw new Exception("action attribute bindto is required");
-                                }
-
-                                if (screenItem.Attributes["cycle"] != null)
-                                {
-                                    UssdActionCycle cycle;
-                                    if(!Enum.TryParse(screenItem.Attributes["cycle"].InnerText,true,out cycle))
-                                    {
-                                        throw new Exception(String.Format("action attribute cycle has an unknown value. Allowed values are: {0} or {1}",UssdActionCycle.Always,UssdActionCycle.Once));
-                                    }
-
-                                    ussdAction.Http.Cycle = cycle;
-                                }
-                            }
-                            else
-                            {
-                                throw new Exception("form attribute id and bindto is required");
-                            }
-
-                            foreach (XmlNode xmlNode in actionNode)
-                            {
-
-
-                                if (xmlNode.Attributes.Count>0)
-                                {
-                                    if (xmlNode.Attributes["url"] != null)
-                                    {
-                                        ussdAction.Http.Url = xmlNode.Attributes["url"].InnerText.ToUssdString(simulator);
-
-                                    }
-                                    else
-                                    {
-                                        throw new Exception("http attribute url is required");
-                                    }
-                                    if (xmlNode.Attributes["method"] != null)
-                                    {
-                                        UssdActionHttpMethod httpMethod;
-                                        if (!Enum.TryParse(xmlNode.Attributes["method"].InnerText,true,out httpMethod))
-                                        {
-                                            throw new Exception("http attribute method is invalid");
-                                        }
-                                        
-                                        ussdAction.Http.Method = httpMethod;
-                                    }
-                                    else
-                                    {
-                                        throw new Exception("http attribute url is required");
-                                    }
-                                }
-
-                          
-                                if (xmlNode.Name == "http")
-                                {
-                                    var httpNodes = xmlNode.ChildNodes;
-
-                                    foreach (XmlNode httpNode in httpNodes)
-                                    {
-                                        if (httpNode.Name=="header")
-                                        {
-                                            var headers = httpNode.ChildNodes;
-
-                                            foreach (XmlNode header in headers)
-                                            {
-                                                if (header.Name=="add")
-                                                {
-                                                    var ussdActionHttpHeader = new UssdActionHttpHeader
-                                                    {
-
-                                                        Name = header.Attributes["key"].InnerText,
-                                                        Value = header.Attributes["value"].InnerText,
-                                                        
-                                                    };
-
-                                                    ussdAction.Http.Headers.Add(ussdActionHttpHeader);
-                                                }
-                                                
-                                            }
-                                        }
-                                        if (httpNode.Name == "body")
-                                        {
-                                            if (httpNode.Attributes["bindfrom"] != null)
-                                            {
-                                              
-                                                ussdAction.Http.Body.BindFrom = new UssdBoundModel
-                                                {
-                                                    Name = httpNode.Attributes["bindfrom"].InnerText
-                                                };
-
-                                            }
-
-                                            var headers = httpNode.ChildNodes;
-
-                                            foreach (XmlNode header in headers)
-                                            {
-                                                if (header.Name == "add")
-                                                {
-                                                    var ussdActionHttpBody = new UssdActionHttpBodyParam
-                                                    {
-
-                                                        Name = header.Attributes["key"].InnerText,
-                                                        Value = header.Attributes["value"].InnerText,
-
-                                                    };
-
-                                                    ussdAction.Http.Body.Params.Add(ussdActionHttpBody);
-                                                }
-
-                                            }
-                                        }
-                                        if (httpNode.Name == "response")
-                                        {
-                                            var responses = httpNode.ChildNodes;
-
-                                            foreach (XmlNode response in responses)
-                                            {
-                                                if (response.Name == "code")
-                                                {
-                                                    var ussdActionHttpResponse = new UssdActionHttpResponse
-                                                    {
-
-                                                        Value = int.Parse(response.Attributes["value"].InnerText),
-                                                        Goto = new UssdNavigator(response.Attributes["goto"].InnerText),
-
-                                                    };
-
-                                                    ussdAction.Http.Responses.Add(ussdActionHttpResponse);
-                                                }
-
-                                            }
-                                        }
-                                    }
-                                 
-
-
-                                }
-                            }
-
-
-                            ussdScreen.UssdItems.Add(ussdAction);
-                            _actions.Add(ussdAction);
-                            Console.WriteLine("added action {0}", ussdAction.Id);
+                            throw new Exception($"script id already exists at {scriptId}");
                         }
                         
+                        var script = new UssdScript
+                        {
+                            Id = scriptId,
+                            Content = ussdElement.InnerText,
+                            BindFrom = ussdElement.Attributes.GetNamedItem("bindfrom") != null?ussdElement.Attributes["bindfrom"].InnerText:"",
+                            BindTo= ussdElement.Attributes.GetNamedItem("bindto") != null?ussdElement.Attributes["bindto"].InnerText:"",
+                            
+                        };
+
+                        _scripts.Add(script);
+                        Console.WriteLine("added script {0}",scriptId);
                     }
+                }
+            }
 
-                    
-                    _screens.Add(ussdScreen);
 
-                    Console.WriteLine("{0} screens",_screens.Count);
+            foreach (XmlNode node in rootNode)
+            {
+                foreach (XmlNode ussdElement in node.ChildNodes)
+                {
+
+                    #region screens
+
+                    if (ussdElement.Name=="screen")
+                    {
+                        if (ussdElement.Attributes["id"] == null)
+                        {
+                            throw new Exception("screen id is required");
+                        }
+                        var screenId = ussdElement.Attributes["id"].InnerText;
+
+                        Console.WriteLine("gotten screen {0}", screenId);
+                        if (_screens.Any(s => s.Id == screenId))
+                        {
+                            throw new Exception($"screen id already exists at {screenId}");
+                        }
+
+                        var ussdScreen = new UssdScreen
+                        {
+                            Id = screenId,
+
+                        };
+
+                        foreach (XmlNode screenItem in ussdElement.ChildNodes)
+                        {
+                            #region Menu Element
+                            if (screenItem.Name.Equals("menu"))
+                            {
+                                var menuNodes = screenItem.ChildNodes;
+
+                                var ussdMenu = new UssdMenu();
+                                if (screenItem.Attributes.Count > 0)
+                                {
+                                    if (screenItem.Attributes["bindfrom"] != null)
+                                    {
+                                        //todo: always check if there's a corresponding bindto in another screen
+                                        ussdMenu.BindFrom = new UssdBoundModel
+                                        {
+                                            Name = screenItem.Attributes["bindfrom"].InnerText
+                                        };
+
+                                    }
+                                    if (screenItem.Attributes["bindaction"] != null)
+                                    {
+
+                                        ussdMenu.BindAction = new UssdBoundAction(screenItem.Attributes["bindaction"].InnerText);
+
+                                    }
+
+                                }
+
+                                foreach (XmlNode menuNode in menuNodes)
+                                {
+
+                                    if (menuNode.Name == "title")
+                                    {
+                                        ussdMenu.Title = menuNode.InnerText.ToUssdString(simulator);
+                                    }
+
+                                    if (menuNode.Name == "option")
+                                    {
+                                        var menuOption = new UssdMenuOption
+                                        {
+                                            Text = menuNode.InnerText,
+                                            Value = menuNode.Attributes["value"].InnerText.ToUssdString(simulator),
+                                            OnSelect = new UssdNavigator(menuNode.Attributes["onselect"].InnerText)
+                                        };
+
+                                        ussdMenu.Options.Add(menuOption);
+
+
+                                    }
+                                }
+
+
+                                ussdScreen.UssdItems.Add(ussdMenu);
+                                _menus.Add(ussdMenu);
+                                Console.WriteLine("added menu {0}", ussdMenu.Title);
+                            }
+                            #endregion
+
+                            #region Form Element
+                            if (screenItem.Name.Equals("form"))
+                            {
+                                var formNodes = screenItem.ChildNodes;
+
+                                var ussdForm = new UssdForm();
+                                if (screenItem.Attributes.Count > 0)
+                                {
+                                    if (screenItem.Attributes["bindto"] != null)
+                                    {
+                                        ussdForm.BindTo = new UssdBoundModel
+                                        {
+                                            Name = screenItem.Attributes["bindto"].InnerText
+                                        };
+                                        //_boundModels[screenItem.Attributes["bindto"].InnerText] = new Dictionary<string, string>();
+
+                                    }
+                                    if (screenItem.Attributes["onsubmit"] != null)
+                                    {
+                                        ussdForm.OnSubmit = new UssdNavigator(screenItem.Attributes["onsubmit"].InnerText);
+
+                                    }
+                                    else
+                                    {
+                                        throw new Exception("form attribute \"onsubmit\" is required");
+                                    }
+
+
+                                }
+
+                                foreach (XmlNode formNode in formNodes)
+                                {
+
+                                    if (formNode.Name == "title")
+                                    {
+                                        ussdForm.Title = formNode.InnerText.ToUssdString(simulator);
+                                    }
+
+                                    if (formNode.Name == "input")
+                                    {
+                                        var ussdFormInput = new UssdFormInput
+                                        {
+
+                                            Id = formNode.Attributes["id"].InnerText,
+                                            Type = formNode.Attributes["type"].InnerText,
+                                            Display = formNode.Attributes["display"].Value.ToUssdString(simulator),
+                                            Required =
+                                                                 bool.Parse(formNode.Attributes["required"].InnerText),
+                                            MaxLength = formNode.Attributes["maxlength"] == null ? (int?)null : int.Parse(formNode.Attributes["maxlength"].InnerText)
+                                        };
+
+                                        if (ussdFormInput.Type == "list")
+                                        {
+                                            ussdFormInput.IsList = true;
+                                            ussdFormInput.ListId = formNode.Attributes["listid"].InnerText;
+                                        }
+
+
+
+                                        ussdForm.Inputs.Add(ussdFormInput);
+
+
+                                    }
+                                    if (formNode.Name == "list")
+                                    {
+
+
+                                        var formListNodes = formNode.ChildNodes;
+
+                                        var ussdFormList = new UssdFormList { Id = formNode.Attributes["id"].InnerText };
+
+
+
+                                        bool hasRepeater = formNode.Attributes.GetNamedItem("repeater") != null;
+
+                                        if (hasRepeater)
+                                        {
+                                       
+                                         
+                                            ussdFormList.Repeater = formNode.Attributes["repeater"].InnerText;
+
+                                            var scriptItem =
+                                                _scripts.FirstOrDefault(s => s.Id == ussdFormList.RepeaterScriptId);
+                                            if (scriptItem == null)
+                                            {
+                                                throw new Exception(
+                                                    $"script id \"{ussdFormList.RepeaterScriptId}\" not found");
+                                            }
+
+                                            
+                                        }
+                                        else
+                                        {
+                                            foreach (XmlNode formListNode in formListNodes)
+                                            {
+
+                                                ussdFormList.Choices.Add(new UssdFormListChoice
+                                                {
+                                                    Text = formListNode.InnerText,
+                                                    Selector = formListNode.Attributes["selector"].InnerText,
+                                                    Value = formListNode.Attributes["value"].InnerText
+                                                });
+                                            }
+                                        }
+
+                                        _formLists.Add(ussdFormList);
+
+                                    }
+                                }
+
+
+                                ussdScreen.UssdItems.Add(ussdForm);
+                                _forms.Add(ussdForm);
+
+                                Console.WriteLine("added form {0}", ussdForm.Title);
+                            }
+
+                            #endregion
+
+                            #region Text Element
+                            if (screenItem.Name.Equals("text"))
+                            {
+                                var ussdText = new UssdText(screenItem.InnerText.ToUssdString(simulator));
+                                if (screenItem.Attributes.Count > 0)
+                                {
+                                    if (screenItem.Attributes["bindfrom"] != null)
+                                    {
+                                        //todo: always check if there's a corresponding bindto in another screen
+                                        ussdText.BindFrom = new UssdBoundModel
+                                        {
+                                            Name = screenItem.Attributes["bindfrom"].InnerText
+                                        };
+
+                                    }
+                                    if (screenItem.Attributes["bindaction"] != null)
+                                    {
+
+                                        ussdText.BindAction = new UssdBoundAction(screenItem.Attributes["bindaction"].InnerText);
+
+                                    }
+
+                                }
+                                ussdScreen.UssdItems.Add(ussdText);
+                            }
+                            #endregion
+
+                            #region Action Element
+                            if (screenItem.Name.Equals("action"))
+                            {
+                                var actionNode = screenItem.ChildNodes;
+
+                                var ussdAction = new UssdAction();
+                                if (screenItem.Attributes.Count > 0)
+                                {
+                                    if (screenItem.Attributes["id"] != null)
+                                    {
+                                        ussdAction.Id = screenItem.Attributes["id"].InnerText;
+
+                                    }
+                                    else
+                                    {
+                                        throw new Exception("action attribute id is required");
+                                    }
+
+                                    if (screenItem.Attributes["bindto"] != null)
+                                    {
+                                        ussdAction.BindTo = new UssdBoundModel
+                                        {
+                                            Name = screenItem.Attributes["bindto"].InnerText
+                                        };
+                                     //   _boundModels[screenItem.Attributes["bindto"].InnerText] = new Dictionary<string, string>();
+
+                                    }
+                                    else
+                                    {
+                                        throw new Exception("action attribute bindto is required");
+                                    }
+
+                                    if (screenItem.Attributes["cycle"] != null)
+                                    {
+                                        UssdActionCycle cycle;
+                                        if (!Enum.TryParse(screenItem.Attributes["cycle"].InnerText, true, out cycle))
+                                        {
+                                            throw new Exception(String.Format("action attribute cycle has an unknown value. Allowed values are: {0} or {1}", UssdActionCycle.Always, UssdActionCycle.Once));
+                                        }
+
+                                        ussdAction.Http.Cycle = cycle;
+                                    }
+                                }
+                                else
+                                {
+                                    throw new Exception("form attribute id and bindto is required");
+                                }
+
+                                foreach (XmlNode xmlNode in actionNode)
+                                {
+
+
+                                    if (xmlNode.Attributes.Count > 0)
+                                    {
+                                        if (xmlNode.Attributes["url"] != null)
+                                        {
+                                            ussdAction.Http.Url = xmlNode.Attributes["url"].InnerText.ToUssdString(simulator);
+
+                                        }
+                                        else
+                                        {
+                                            throw new Exception("http attribute url is required");
+                                        }
+                                        if (xmlNode.Attributes["method"] != null)
+                                        {
+                                            UssdActionHttpMethod httpMethod;
+                                            if (!Enum.TryParse(xmlNode.Attributes["method"].InnerText, true, out httpMethod))
+                                            {
+                                                throw new Exception("http attribute method is invalid");
+                                            }
+
+                                            ussdAction.Http.Method = httpMethod;
+                                        }
+                                        else
+                                        {
+                                            throw new Exception("http attribute method is required");
+                                        }
+                                    }
+
+
+                                    if (xmlNode.Name == "http")
+                                    {
+                                        var httpNodes = xmlNode.ChildNodes;
+
+                                        foreach (XmlNode httpNode in httpNodes)
+                                        {
+                                            if (httpNode.Name == "header")
+                                            {
+                                                var headers = httpNode.ChildNodes;
+
+                                                foreach (XmlNode header in headers)
+                                                {
+                                                    if (header.Name == "add")
+                                                    {
+                                                        var ussdActionHttpHeader = new UssdActionHttpHeader
+                                                        {
+
+                                                            Name = header.Attributes["key"].InnerText,
+                                                            Value = header.Attributes["value"].InnerText,
+
+                                                        };
+
+                                                        ussdAction.Http.Headers.Add(ussdActionHttpHeader);
+                                                    }
+
+                                                }
+                                            }
+                                            if (httpNode.Name == "body")
+                                            {
+                                                if (httpNode.Attributes["bindfrom"] != null)
+                                                {
+
+                                                    ussdAction.Http.Body.BindFrom = new UssdBoundModel
+                                                    {
+                                                        Name = httpNode.Attributes["bindfrom"].InnerText
+                                                    };
+
+                                                }
+
+                                                var headers = httpNode.ChildNodes;
+
+                                                foreach (XmlNode header in headers)
+                                                {
+                                                    if (header.Name == "add")
+                                                    {
+                                                        var ussdActionHttpBody = new UssdActionHttpBodyParam
+                                                        {
+
+                                                            Name = header.Attributes["key"].InnerText,
+                                                            Value = header.Attributes["value"].InnerText,
+
+                                                        };
+
+                                                        ussdAction.Http.Body.Params.Add(ussdActionHttpBody);
+                                                    }
+
+                                                }
+                                            }
+                                            if (httpNode.Name == "response")
+                                            {
+                                                var responses = httpNode.ChildNodes;
+
+                                                foreach (XmlNode response in responses)
+                                                {
+                                                    if (response.Name == "code")
+                                                    {
+                                                        var ussdActionHttpResponse = new UssdActionHttpResponse
+                                                        {
+
+                                                            Value = int.Parse(response.Attributes["value"].InnerText),
+                                                            Goto = new UssdNavigator(response.Attributes["goto"].InnerText),
+
+                                                        };
+
+                                                        ussdAction.Http.Responses.Add(ussdActionHttpResponse);
+                                                    }
+
+                                                }
+                                            }
+                                        }
+
+
+
+                                    }
+                                }
+
+
+                                ussdScreen.UssdItems.Add(ussdAction);
+                                _actions.Add(ussdAction);
+                                Console.WriteLine("added action {0}", ussdAction.Id);
+                            }
+
+                            #endregion
+
+                        }
+
+                        if (ussdElement.Attributes["main"] != null
+                            )
+                        {
+                            var mainString = ussdElement.Attributes["main"].InnerText;
+
+                            bool isMain;
+
+                            if (bool.TryParse(mainString, out isMain))
+                            {
+                                ussdScreen.Main = isMain;
+                            }
+                        }
+
+                        _screens.Add(ussdScreen);
+
+                        Console.WriteLine("{0} screens", _screens.Count);
+                    }
+                   
+                    #endregion
+
                 }
             }
 
@@ -459,47 +585,154 @@ namespace XmlToUssdCompiler
             {
                 throw new Exception("no screens");
             }
+
+            if (!_screens.Any(s=>s.Main))
+            {
+                throw new Exception("no main attribute on any of the screens. Please include main=\"true\" as attribute on your main screen element");
+            }
         }
 
         public void RunSimulator()
         {
-            var firstScreen = _screens[0];
+            //var firstScreen = _screens[0];
+            var firstScreen = _screens.FirstOrDefault(x=>x.Main);
 
+            if (firstScreen==null)
+            {
+                firstScreen = _screens[0];
+            }
             ShowScreen(firstScreen);
         }
 
+
+        private readonly Assembly[] _scriptAssemblies = {
+            typeof(Dictionary<,>).Assembly,
+            typeof(JsonConvert).Assembly,
+            typeof(HttpClient).Assembly,
+            typeof(Task).Assembly,
+            typeof(ScriptInput).Assembly,
+            
+        };
+
+        private readonly string[] _scriptImports = {
+            "System",
+            "System.Linq",
+            "System.Collections.Generic",
+            "System.Net",
+            "System.Net.Http",
+            "System.Net.Http.Headers",
+            "System.Threading.Tasks",
+            "Newtonsoft.Json",
+            "Newtonsoft.Json.Linq",
+            "XmlToUssdCompiler.ScriptModels"
+        };
         private void ShowScreen(UssdScreen firstScreen)
         {
+            
             foreach (var ussdItem in firstScreen.UssdItems)
             {
+
+#region Menu
                 if (ussdItem.GetType() == typeof (UssdMenu))
                 {
                     var ussdMenu = (UssdMenu) ussdItem;
 
-                    var model = _boundModels.Keys.FirstOrDefault(k => k == ussdMenu.BindFrom.Name);
-
-                    if (model == null)
-                    {
-                        Console.WriteLine(ussdMenu.Title.Trim());
-                    }
-                    else
+                    if (!string.IsNullOrEmpty(ussdMenu.BindAction.Name)) //bindaction is priority now
                     {
 
-                        if (!string.IsNullOrEmpty(ussdMenu.BindAction.Name))
+                        //menu action is not always a UssdAction
+                        if (ussdMenu.BindAction.NavType == UssdNavigatorTypes.ToScript)
+                        {
+                            var script = _scripts.FirstOrDefault(s => s.Id == ussdMenu.BindAction.Name);
+
+                            if (script == null)
+                            {
+                                throw new Exception($"script with ID {ussdMenu.BindAction.Name} not found");
+                            }
+
+                            ScriptOutput scriptResult;
+                            try
+                            {
+                                var scriptOptions = ScriptOptions.Default.
+                                    WithReferences(_scriptAssemblies)
+                                    .WithImports(_scriptImports)
+                                    .WithSourceResolver(new SourceFileResolver(new[] { "" },
+                                        AppDomain.CurrentDomain.BaseDirectory));
+
+                                dynamic eo2 = null;
+                                var eo = new ExpandoObject();
+
+                                var eoColl = (ICollection<KeyValuePair<string, dynamic>>)eo;
+
+                                var scriptContent = script.Content;
+                                if (!string.IsNullOrEmpty(script.BindFrom))
+                                {
+                                    //a hack to ensure that the proper class instance name is called instead of dev's "user.name"
+                                    scriptContent = scriptContent.Replace(script.BindFrom + ".", "BindFrom.");
+
+                                    var bindFromDict = _boundModels[script.BindFrom];
+
+                                    foreach (var kvp in bindFromDict)
+                                    {
+                                        eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                                    }
+                                   // eo2 = bindFromDict;
+                                }
+
+                                dynamic eoDynamic = eo;
+                              
+
+                                scriptResult = CSharpScript.EvaluateAsync<ScriptOutput>(scriptContent, scriptOptions, new ScriptInput(new LussdRequestContext(), eoDynamic), typeof(ScriptInput)).Result;
+
+                                if (!string.IsNullOrEmpty(script.BindTo))
+                                {
+                                    //var sr = JsonConvert.SerializeObject(scriptResult.Response);
+
+                                    //var dictionaryOfScriptResult =JsonConvert.DeserializeObject<Dictionary<string, string>>(sr);
+
+                                    _boundModels[script.BindTo] = scriptResult.Response;
+
+                                }
+                                if (!string.IsNullOrEmpty(scriptResult.NextScreen))
+                                {
+                                    var nextScreen = _screens.FirstOrDefault(s => s.Id == scriptResult.NextScreen);
+                                    if (nextScreen == null)
+                                    {
+                                        throw new Exception($"unknown screen \"{scriptResult.NextScreen}\"");
+                                    }
+                                    ShowScreen(nextScreen);
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new Exception(ex.Message);
+                            }
+                        }
+                        if (ussdMenu.BindAction.NavType == UssdNavigatorTypes.ToScreen)
+                        {
+                            var screenToNavigate = _screens.FirstOrDefault(s => s.Id == ussdMenu.BindAction.Name);
+
+                            if (screenToNavigate == null)
+                            {
+                                throw new Exception($"screen id \"{ussdMenu.BindAction.Name}\" does not exist");
+                            }
+
+                            ShowScreen(screenToNavigate);
+                        }
+
+                        if (ussdMenu.BindAction.NavType == UssdNavigatorTypes.ToAction)
                         {
                             UssdAction actionItem = _actions.FirstOrDefault(a => a.Id == ussdMenu.BindAction.Name);
 
-                            //var actionItem =
-                            //    (UssdAction)
-                            //        firstScreen.UssdItems.FirstOrDefault(a => a.GetType() == typeof (UssdAction));
-
                             if (actionItem == null)
                             {
-                                throw new Exception(String.Format("undefined action {0}", ussdMenu.BindAction.Name));
+                                throw new Exception($"undefined action {ussdMenu.BindAction.Name}");
                             }
-                            
+
                             if (actionItem.Http.Cycle == UssdActionCycle.Once)
                             {
+                                //todo: might throw an error
                                 if (_boundModels[actionItem.BindTo.Name].Any()) //todo: this might not be so necessary, cos a developer may just want to call an API, no binding
                                 {
 
@@ -507,59 +740,20 @@ namespace XmlToUssdCompiler
                                 else
                                 {
 
-                                    var actionResponse = GrabActionResponse(actionItem).Result;
-
-
-                                    var bdict = new Dictionary<string, string>();
-
-                                    foreach (var property in actionResponse.Item2.Properties())
-                                    {
-                                        bdict.Add(property.Name, property.Value.ToString());
-                                    }
-
-                                    ussdMenu.BindAction.Value = bdict;
-
-                                    _boundModels[actionItem.BindTo.Name] = bdict;
-
-                                    Console.WriteLine("HTTP response {0}", actionResponse.Item1);
-
-                                    if (actionItem.Http.Responses.Any())
-                                    {
-                                        var navigatorLabel =
-                                            actionItem.Http.Responses.FirstOrDefault(
-                                                r => r.Value == (int) actionResponse.Item1);
-
-                                        if (navigatorLabel != null)
-                                        {
-                                            //todo: we need to discourage "ussd:action" for now....
-                                            ShowScreen(
-                                                _screens.FirstOrDefault(
-                                                    s => s.Id == navigatorLabel.Goto.Id));
-                                            return;
-                                        }
-                                    }
-                                    //no replacement occured....HTTP failed.
-
-                                }
-
-                            }
-                            else if (actionItem.Http.Cycle == UssdActionCycle.Always)
-                            {
-                                
 
                                     var actionResponse = GrabActionResponse(actionItem).Result;
 
 
-                                    var bdict = new Dictionary<string, string>();
+                                    var bdict = new Dictionary<string, dynamic>();
 
                                     foreach (var property in actionResponse.Item2.Properties())
                                     {
-                                        bdict.Add(property.Name, property.Value.ToString());
+                                        bdict.Add(property.Name, property.Value);
                                     }
 
                                     ussdMenu.BindAction.Value = bdict;
 
-                                    _boundModels[actionItem.BindTo.Name] = bdict;
+                                    _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
 
                                     Console.WriteLine("HTTP response {0}", actionResponse.Item1);
 
@@ -578,36 +772,123 @@ namespace XmlToUssdCompiler
                                             return;
                                         }
                                     }
+                                    //no replacement occured....HTTP failed.
 
-
-                                
+                                }
 
                             }
+                            else if (actionItem.Http.Cycle == UssdActionCycle.Always)
+                            {
 
+
+                                var actionResponse = GrabActionResponse(actionItem).Result;
+
+
+                                var bdict = new Dictionary<string, dynamic>();
+
+                                foreach (var property in actionResponse.Item2.Properties())
+                                {
+                                    bdict.Add(property.Name, property.Value);
+                                }
+
+                                ussdMenu.BindAction.Value = bdict;
+
+                                _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
+
+                                Console.WriteLine("HTTP response {0}", actionResponse.Item1);
+
+                                if (actionItem.Http.Responses.Any())
+                                {
+                                    var navigatorLabel =
+                                        actionItem.Http.Responses.FirstOrDefault(
+                                            r => r.Value == (int)actionResponse.Item1);
+
+                                    if (navigatorLabel != null)
+                                    {
+                                        //todo: we need to discourage "ussd:action" for now....
+                                        ShowScreen(
+                                            _screens.FirstOrDefault(
+                                                s => s.Id == navigatorLabel.Goto.Id));
+                                        return;
+                                    }
+                                }
+                            }
                         }
 
+                    }
+
+                    var model = _boundModels.Keys.FirstOrDefault(k => k == ussdMenu.BindFrom.Name);
+
+                    if (model == null)
+                    {
+                        Console.WriteLine(ussdMenu.Title.Trim());
+                    }
+                    else
+                    {
                         var title = ussdMenu.Title.Trim();
                         var boundModel = _boundModels[ussdMenu.BindFrom.Name];
 
+                        title = title.ToUssdString();
 
-                        foreach (var item in boundModel.Keys)
+                        dynamic dynamicExpression = boundModel;
+                        //end
+
+                        try
                         {
-                            if (ussdMenu.Title.Trim().Contains("." + item))
-                            {
-                                title = title.Replace("." + item + "}", boundModel[item]);
-                            }
+                            var sContent = "var " + ussdMenu.BindFrom.Name + " = LussdDynamicExpression; " + "\r\n return $\"" + title + "\";";
+                            var scriptOptions = ScriptOptions.Default.
+                                        WithReferences(_scriptAssemblies)
+                                        .WithImports(_scriptImports)
+                                        .WithSourceResolver(new SourceFileResolver(new[] { "" },
+                                            AppDomain.CurrentDomain.BaseDirectory));
+                            var scriptResult = CSharpScript.EvaluateAsync<string>(sContent, scriptOptions, new LussdDynamicExpressionObject { LussdDynamicExpression = dynamicExpression }, typeof(LussdDynamicExpressionObject)).Result;
+
+                            Console.WriteLine(scriptResult);
                         }
-                        if (boundModel.Any())
+                        catch (Exception exception)
                         {
-                            title = title.Replace("{" + ussdMenu.BindFrom.Name, "");
+                            throw new Exception(exception.Message);
                         }
-                        Console.WriteLine(title);
+
+                        
                     }
 
 
                     foreach (var ussdMenuOption in ussdMenu.Options)
                     {
-                        Console.WriteLine(ussdMenuOption.Text);
+                        //todo: check for variable expressions
+                        if (model != null)
+                        {
+                            var title = ussdMenuOption.Text;
+                            var boundModel = _boundModels[ussdMenu.BindFrom.Name];
+
+                            title = title.ToUssdString();
+
+                            dynamic dynamicExpression = boundModel;
+                            //end
+
+                            try
+                            {
+                                var sContent = "var " + ussdMenu.BindFrom.Name + " = LussdDynamicExpression; " + "\r\n return $\"" + title + "\";";
+                                var scriptOptions = ScriptOptions.Default.
+                                            WithReferences(_scriptAssemblies)
+                                            .WithImports(_scriptImports)
+                                            .WithSourceResolver(new SourceFileResolver(new[] { "" },
+                                                AppDomain.CurrentDomain.BaseDirectory));
+                                var scriptResult = CSharpScript.EvaluateAsync<string>(sContent, scriptOptions, new LussdDynamicExpressionObject { LussdDynamicExpression = dynamicExpression }, typeof(LussdDynamicExpressionObject)).Result;
+
+                                Console.WriteLine(scriptResult);
+                            }
+                            catch (Exception exception)
+                            {
+                                throw new Exception(exception.Message);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine(ussdMenuOption.Text);
+                        }
+                      
                     }
 
                     var resp = Console.ReadLine();
@@ -621,14 +902,82 @@ namespace XmlToUssdCompiler
                     }
 
                     var menuOption = ussdMenu.Options.FirstOrDefault(s => s.Value == resp);
+                    if (menuOption.OnSelect.NavType== UssdNavigatorTypes.ToScript)
+                    {
+                        var script = _scripts.FirstOrDefault(s => s.Id == menuOption.OnSelect.Id);
 
+                        if (script == null)
+                        {
+                            throw new Exception($"script with ID {menuOption.OnSelect.Id} not found");
+                        }
+
+                        ScriptOutput scriptResult;
+                        try
+                        {
+                            var scriptOptions = ScriptOptions.Default.
+                                WithReferences(_scriptAssemblies)
+                                .WithImports(_scriptImports)
+                                .WithSourceResolver(new SourceFileResolver(new[] { "" },
+                                    AppDomain.CurrentDomain.BaseDirectory));
+
+
+                           // var eo = new ExpandoObject();
+                            dynamic eo2 = null;
+                          //  var eoColl = (ICollection<KeyValuePair<string, dynamic>>)eo;
+
+                            if (!string.IsNullOrEmpty(script.BindFrom))
+                            {
+                                var bindFromDict = _boundModels[script.BindFrom];
+
+                                
+                                //foreach (var kvp in bindFromDict)
+                                //{
+                                //    eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                                //}
+
+                                eo2 = bindFromDict;
+                            }
+
+                            dynamic eoDynamic = eo2;
+                            var scriptContent = script.Content;
+                            //a hack to ensure that the proper class instance name is called instead of dev's "user.name"
+                            scriptContent = scriptContent.Replace(script.BindFrom + ".", "BindFrom.");
+
+                            scriptResult = CSharpScript.EvaluateAsync<ScriptOutput>(scriptContent, scriptOptions, new ScriptInput(new LussdRequestContext(), eoDynamic), typeof(ScriptInput)).Result;
+
+                            if (!string.IsNullOrEmpty(script.BindTo))
+                            {
+                                //var sr = JsonConvert.SerializeObject(scriptResult.Response);
+
+                               // var dictionaryOfScriptResult =
+                                 //   JsonConvert.DeserializeObject<Dictionary<string, string>>(sr);
+
+                                _boundModels[script.BindTo] = scriptResult.Response;
+
+                            }
+                            if (!string.IsNullOrEmpty(scriptResult.NextScreen))
+                            {
+                                var nextScreen = _screens.FirstOrDefault(s => s.Id == scriptResult.NextScreen);
+                                if (nextScreen == null)
+                                {
+                                    throw new Exception($"unknown screen \"{scriptResult.NextScreen}\"");
+                                }
+                                ShowScreen(nextScreen);
+                                return;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception(ex.Message);
+                        }
+                    }
                     if (menuOption.OnSelect.NavType==UssdNavigatorTypes.ToAction)
                     {
                  
                         var actionItem = _actions.FirstOrDefault(a => a.Id == menuOption.OnSelect.Id);
                         if (actionItem == null)
                         {
-                            throw new Exception(String.Format("undefined action {0}", ussdMenu.BindAction.Name));
+                            throw new Exception($"undefined action {ussdMenu.BindAction.Name}");
                         }
 
                         if (actionItem.Http.Cycle == UssdActionCycle.Once)
@@ -643,16 +992,16 @@ namespace XmlToUssdCompiler
                                 var actionResponse = GrabActionResponse(actionItem).Result;
 
 
-                                var bdict = new Dictionary<string, string>();
+                                var bdict = new Dictionary<string, dynamic>();
 
                                 foreach (var property in actionResponse.Item2.Properties())
                                 {
-                                    bdict.Add(property.Name, property.Value.ToString());
+                                    bdict.Add(property.Name, property.Value);
                                 }
 
                                 ussdMenu.BindAction.Value = bdict;
 
-                                _boundModels[actionItem.BindTo.Name] = bdict;
+                                _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
 
                                 Console.WriteLine("HTTP response {0}", actionResponse.Item1);
 
@@ -683,16 +1032,218 @@ namespace XmlToUssdCompiler
                                 var actionResponse = GrabActionResponse(actionItem).Result;
 
 
-                                var bdict = new Dictionary<string, string>();
+                            var bdict = new Dictionary<string, dynamic>();
+
+                            foreach (var property in actionResponse.Item2.Properties())
+                            {
+                                bdict.Add(property.Name, property.Value);
+                            }
+
+                            ussdMenu.BindAction.Value = bdict;
+
+                                _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
+
+                                Console.WriteLine("HTTP response {0}", actionResponse.Item1);
+
+                                if (actionItem.Http.Responses.Any())
+                                {
+                                    var navigatorLabel =
+                                        actionItem.Http.Responses.FirstOrDefault(
+                                            r => r.Value == (int)actionResponse.Item1);
+
+                                    if (navigatorLabel != null)
+                                    {
+                                        //todo: we need to discourage "ussd:action" for now....
+                                        ShowScreen(
+                                            _screens.FirstOrDefault(
+                                                s => s.Id == navigatorLabel.Goto.Id));
+                                        return;
+                                    }
+                                }
+
+                        }
+                    }
+                    if (menuOption.OnSelect.NavType== UssdNavigatorTypes.ToScreen)
+                    {
+                       // Console.WriteLine("navigating to {0}", menuOption.OnSelect.UssdScreen.Id);
+                        var screenToNavigate = _screens.FirstOrDefault(s => s.Id == menuOption.OnSelect.UssdScreen.Id);
+
+                        if (screenToNavigate == null)
+                        {
+                            throw new Exception($"screen id \"{menuOption.OnSelect.UssdScreen.Id}\" does not exist");
+                        }
+
+                        ShowScreen(screenToNavigate);
+                        
+                    }
+                  
+                }
+
+                #endregion Menu
+
+#region Text
+                if (ussdItem.GetType() == typeof (UssdText))
+                {
+                    var ussdText = (UssdText) ussdItem;
+
+                    if (!string.IsNullOrEmpty(ussdText.BindAction.Name))
+                    {
+
+                        if (ussdText.BindAction.NavType== UssdNavigatorTypes.ToScreen)
+                        {
+                            var screenToNavigate = _screens.FirstOrDefault(s => s.Id == ussdText.BindAction.Name);
+
+                            if (screenToNavigate == null)
+                            {
+                                throw new Exception($"screen id \"{ussdText.BindAction.Name}\" does not exist");
+                            }
+
+                            ShowScreen(screenToNavigate);
+                        }
+                        if (ussdText.BindAction.NavType == UssdNavigatorTypes.ToScript)
+                        {
+                            var script = _scripts.FirstOrDefault(s => s.Id == ussdText.BindAction.Name);
+
+                            if (script == null)
+                            {
+                                throw new Exception($"script with ID {ussdText.BindAction.Name} not found");
+                            }
+
+                            ScriptOutput scriptResult;
+                            try
+                            {
+                                var scriptOptions = ScriptOptions.Default.
+                                    WithReferences(_scriptAssemblies)
+                                    .WithImports(_scriptImports)
+                                    .WithSourceResolver(new SourceFileResolver(new[] { "" },
+                                        AppDomain.CurrentDomain.BaseDirectory));
+
+
+                                //var eo = new ExpandoObject();
+                             
+
+                                //var eoColl = (ICollection<KeyValuePair<string, dynamic>>)eo;
+
+                                var scriptContent = script.Content;
+                                dynamic eo2 = null;
+                                if (!string.IsNullOrEmpty(script.BindFrom))
+                                {
+                                    //a hack to ensure that the proper class instance name is called instead of dev's "user.name"
+                                    scriptContent = scriptContent.Replace(script.BindFrom + ".", "BindFrom.");
+
+
+                                    var bindFromDict = _boundModels[script.BindFrom];
+
+                                    //foreach (var kvp in bindFromDict)
+                                    //{
+                                    //    eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                                    //}
+
+                                    eo2 = bindFromDict;
+                                }
+
+                                dynamic eoDynamic = eo2;
+                               
+                                scriptResult = CSharpScript.EvaluateAsync<ScriptOutput>(scriptContent, scriptOptions, new ScriptInput(new LussdRequestContext(), eoDynamic), typeof(ScriptInput)).Result;
+
+                                if (!string.IsNullOrEmpty(script.BindTo))
+                                {
+                                    //var sr = JsonConvert.SerializeObject(scriptResult.Response);
+
+                                    //var dictionaryOfScriptResult =
+                                    //    JsonConvert.DeserializeObject<Dictionary<string, string>>(sr);
+
+                                    _boundModels[script.BindTo] = scriptResult.Response;
+
+                                }
+                                if (!string.IsNullOrEmpty(scriptResult.NextScreen))
+                                {
+                                    var nextScreen = _screens.FirstOrDefault(s => s.Id == scriptResult.NextScreen);
+                                    if (nextScreen == null)
+                                    {
+                                        throw new Exception($"unknown screen \"{scriptResult.NextScreen}\"");
+                                    }
+                                    ShowScreen(nextScreen);
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new Exception(ex.Message);
+                            }
+                        }
+                        if (ussdText.BindAction.NavType == UssdNavigatorTypes.ToAction)
+                        {
+                            var actionItem = _actions.FirstOrDefault(a => a.Id == ussdText.BindAction.Name);
+
+
+                            if (actionItem == null)
+                            {
+                                throw new Exception($"undefined action {ussdText.BindAction.Name}");
+                            }
+
+                            if (actionItem.Http.Cycle == UssdActionCycle.Once)
+                            {
+                                if (_boundModels[actionItem.BindTo.Name].Any())
+                                {
+
+                                }
+                                else
+                                {
+
+                                    var actionResponse = GrabActionResponse(actionItem).Result;
+
+                                    var bdict = new Dictionary<string, dynamic>();
+
+                                    foreach (var property in actionResponse.Item2.Properties())
+                                    {
+                                        bdict.Add(property.Name, property.Value);
+                                    }
+
+                                    ussdText.BindAction.Value =bdict;
+
+                                    _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
+
+
+
+                                    Console.WriteLine("HTTP response {0}", actionResponse.Item1);
+                                    //no replacement occured....HTTP failed.
+                                    if (actionItem.Http.Responses.Any())
+                                    {
+                                        var navigatorLabel =
+                                            actionItem.Http.Responses.FirstOrDefault(
+                                                r => r.Value == (int)actionResponse.Item1);
+
+                                        if (navigatorLabel != null)
+                                        {
+                                            //todo: check which type of label it is
+                                            ShowScreen(
+                                                _screens.FirstOrDefault(
+                                                    s => s.Id == navigatorLabel.Goto.Id));
+                                            return;
+                                        }
+                                    }
+
+                                }
+
+                            }
+                            else if (actionItem.Http.Cycle == UssdActionCycle.Always)
+                            {
+
+
+                                var actionResponse = GrabActionResponse(actionItem).Result;
+
+
+                                var bdict = new Dictionary<string, dynamic>();
 
                                 foreach (var property in actionResponse.Item2.Properties())
                                 {
-                                    bdict.Add(property.Name, property.Value.ToString());
+                                    bdict.Add(property.Name, property.Value);
                                 }
 
-                                ussdMenu.BindAction.Value = bdict;
+                                ussdText.BindAction.Value = bdict;
 
-                                _boundModels[actionItem.BindTo.Name] = bdict;
+                                _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
 
                                 Console.WriteLine("HTTP response {0}", actionResponse.Item1);
 
@@ -713,18 +1264,13 @@ namespace XmlToUssdCompiler
                                 }
 
 
-                 
 
+
+                            }
                         }
+                        
+
                     }
-                    Console.WriteLine("navigating to {0}", menuOption.OnSelect.UssdScreen.Id);
-                    ShowScreen(_screens.FirstOrDefault(s => s.Id == menuOption.OnSelect.UssdScreen.Id));
-                }
-
-                if (ussdItem.GetType() == typeof (UssdText))
-                {
-                    var ussdText = (UssdText) ussdItem;
-
 
                     var model = _boundModels.Keys.FirstOrDefault(k => k == ussdText.BindFrom.Name);
 
@@ -734,129 +1280,55 @@ namespace XmlToUssdCompiler
                     }
                     else
                     {
-                        if (!string.IsNullOrEmpty(ussdText.BindAction.Name))
-                        {
-                            var actionItem = _actions.FirstOrDefault(a => a.Id == ussdText.BindAction.Name);
-
-                            //var actionItem =
-                            //    (UssdAction)
-                            //        firstScreen.UssdItems.FirstOrDefault(a => a.GetType() == typeof (UssdAction));
-
-                            if (actionItem == null)
-                            {
-                                throw new Exception(String.Format("undefined action {0}", ussdText.BindAction.Name));
-                            }
-
-                            if (actionItem.Http.Cycle == UssdActionCycle.Once)
-                            {
-                                if (_boundModels[actionItem.BindTo.Name].Any())
-                                {
-
-                                }
-                                else
-                                {
-
-                                    var actionResponse = GrabActionResponse(actionItem).Result;
-
-                                    var bdict = new Dictionary<string, string>();
-
-                                    foreach (var property in actionResponse.Item2.Properties())
-                                    {
-                                        bdict.Add(property.Name, property.Value.ToString());
-                                    }
-
-                                    ussdText.BindAction.Value = bdict;
-
-                                    _boundModels[actionItem.BindTo.Name] = bdict;
-
-
-
-                                    Console.WriteLine("HTTP response {0}", actionResponse.Item1);
-                                    //no replacement occured....HTTP failed.
-                                    if (actionItem.Http.Responses.Any())
-                                    {
-                                        var navigatorLabel =
-                                            actionItem.Http.Responses.FirstOrDefault(
-                                                r => r.Value == (int) actionResponse.Item1);
-
-                                        if (navigatorLabel != null)
-                                        {
-                                            //todo: check which type of label it is
-                                            ShowScreen(
-                                                _screens.FirstOrDefault(
-                                                    s => s.Id == navigatorLabel.Goto.Id));
-                                            return;
-                                        }
-                                    }
-
-                                }
-
-                            }
-                            else if (actionItem.Http.Cycle == UssdActionCycle.Always)
-                            {
-                               
-
-                                    var actionResponse = GrabActionResponse(actionItem).Result;
-
-
-                                    var bdict = new Dictionary<string, string>();
-
-                                    foreach (var property in actionResponse.Item2.Properties())
-                                    {
-                                        bdict.Add(property.Name, property.Value.ToString());
-                                    }
-
-                                    ussdText.BindAction.Value = bdict;
-
-                                    _boundModels[actionItem.BindTo.Name] = bdict;
-
-                                    Console.WriteLine("HTTP response {0}", actionResponse.Item1);
-
-                                    if (actionItem.Http.Responses.Any())
-                                    {
-                                        var navigatorLabel =
-                                            actionItem.Http.Responses.FirstOrDefault(
-                                                r => r.Value == (int)actionResponse.Item1);
-
-                                        if (navigatorLabel != null)
-                                        {
-                                            //todo: we need to discourage "ussd:action" for now....
-                                            ShowScreen(
-                                                _screens.FirstOrDefault(
-                                                    s => s.Id == navigatorLabel.Goto.Id));
-                                            return;
-                                        }
-                                    }
-
-
-                                
-
-                            }
-
-                        }
+                       
 
                         var title = ussdText.Text.Trim();
                         var boundModel = _boundModels[ussdText.BindFrom.Name];
-                        foreach (var item in boundModel.Keys)
+
+                        title = title.ToUssdString();
+
+                        //var eo = new ExpandoObject();
+
+                        //var eoColl = (ICollection<KeyValuePair<string, dynamic>>)eo;
+                        
+                        //foreach (var kvp in boundModel)
+                        //{
+                        //    eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                        //}
+
+                        dynamic dynamicExpression = boundModel;
+                        //end
+
+                        try
                         {
-                            if (ussdText.Text.Trim().Contains("." + item))
-                            {
-                                title = title.Replace("." + item + "}", boundModel[item]);
-                                //break;
-                            }
+                            var sContent = "var " + ussdText.BindFrom.Name + " = LussdDynamicExpression; " + "\r\n return $\"" + title + "\";";
+                            var scriptOptions = ScriptOptions.Default.
+                                        WithReferences(_scriptAssemblies)
+                                        .WithImports(_scriptImports)
+                                        .WithSourceResolver(new SourceFileResolver(new[] { "" },
+                                            AppDomain.CurrentDomain.BaseDirectory));
+                            var scriptResult = CSharpScript.EvaluateAsync<string>(sContent, scriptOptions, new LussdDynamicExpressionObject { LussdDynamicExpression = dynamicExpression }, typeof(LussdDynamicExpressionObject)).Result;
+
+                            Console.WriteLine(scriptResult);
                         }
-                        Console.WriteLine(title.Replace("{" + ussdText.BindFrom.Name, ""));
+                        catch (Exception exception)
+                        {
+                            throw new Exception(exception.Message);
+                        }
+                    
+                        
                     }
-
-
-                    Console.WriteLine("done :)");
+                   
                 }
 
+                #endregion Text
+
+#region Form
                 if (ussdItem.GetType() == typeof (UssdForm))
                 {
                     var ussdForm = (UssdForm) ussdItem;
 
-                    Console.WriteLine(ussdForm.Title.Trim());
+                    Console.WriteLine(ussdForm.Title.Trim()); //todo: parse the title, include bindfrom for form
 
                     foreach (var ussdFormInput in ussdForm.Inputs)
                     {
@@ -870,7 +1342,68 @@ namespace XmlToUssdCompiler
 
                             if (listItem == null)
                             {
-                                throw new Exception(string.Format("list with id {0} not found", ussdFormInput.ListId));
+                                throw new Exception($"list with id {ussdFormInput.ListId} not found");
+                            }
+
+                            if (listItem.HasRepeater)
+                            {
+                                
+                                var script = _scripts.FirstOrDefault(s => s.Id == listItem.RepeaterScriptId);
+
+                                if (script == null)
+                                {
+                                    throw new Exception($"script with ID {listItem.RepeaterScriptId} not found");
+                                }
+
+
+                                ScriptOutput scriptResult;
+                                try
+                                {
+                                    var scriptOptions = ScriptOptions.Default.
+                                        WithReferences(_scriptAssemblies)
+                                        .WithImports(_scriptImports)
+                                        .WithSourceResolver(new SourceFileResolver(new[] {""},
+                                            AppDomain.CurrentDomain.BaseDirectory));
+
+
+                                    var eo = new ExpandoObject();
+
+                                    var eoColl = (ICollection<KeyValuePair<string, dynamic>>)eo;
+
+                                    foreach (var kvp in ussdForm.BindTo.Value)
+                                    {
+                                        //eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                                        eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                                    }
+
+                                    dynamic eoDynamic = eo;
+                                    var scriptContent = script.Content;
+
+                                    //a hack to ensure that the proper class instance name is called instead of dev's "user.name"
+                                    scriptContent = scriptContent.Replace(script.BindFrom + ".", "BindFrom.");
+
+                                    scriptResult = CSharpScript.EvaluateAsync<ScriptOutput>(scriptContent,scriptOptions,new ScriptInput(new LussdRequestContext(), eoDynamic),typeof(ScriptInput)).Result;
+                                }
+                                catch (Exception ex)
+                                {
+                                    throw new Exception(ex.Message);
+                                }
+
+
+                                listItem.Choices.Clear();
+                                if (scriptResult.Response==null)
+                                {
+                                    throw new Exception("List response is null");
+                                }
+                                foreach (var item in scriptResult.Response)
+                                {
+                                    listItem.Choices.Add(new UssdFormListChoice
+                                    {
+                                        Value = item.value,
+                                        Selector = item.selector,
+                                        Text = item.text
+                                    });
+                                }
                             }
 
                             listItem.Choices.ForEach(Console.WriteLine);
@@ -899,8 +1432,6 @@ namespace XmlToUssdCompiler
 
                                 if (IsNumber(val))
                                 {
-
-
                                     ussdForm.BindTo.Value[ussdFormInput.Id] = val;
                                     break;
                                 }
@@ -917,8 +1448,6 @@ namespace XmlToUssdCompiler
                                 decimal money;
                                 if (decimal.TryParse(val, out money))
                                 {
-
-
                                     ussdForm.BindTo.Value[ussdFormInput.Id] = val;
                                     break;
                                 }
@@ -932,11 +1461,10 @@ namespace XmlToUssdCompiler
 
                             if (listItem==null)
                             {
-                                throw new Exception(string.Format("list with id {0} not found",ussdFormInput.ListId));
+                                throw new Exception($"list with id {ussdFormInput.ListId} not found");
                             }
 
-                            //listItem.Choices.ForEach(Console.WriteLine);
-
+                           
                             var val = ussdForm.BindTo.Value[ussdFormInput.Id];
                             while (true)
                             {
@@ -972,8 +1500,175 @@ namespace XmlToUssdCompiler
                     }
 
                     _boundModels[ussdForm.BindTo.Name] = ussdForm.BindTo.Value;
-                    ShowScreen(_screens.FirstOrDefault(s => s.Id == ussdForm.OnSubmit.UssdScreen.Id));
+
+                    if (ussdForm.OnSubmit.NavType== UssdNavigatorTypes.ToScreen)
+                    {
+                      
+                        var screenToNavigate = _screens.FirstOrDefault(s => s.Id == ussdForm.OnSubmit.UssdScreen.Id);
+
+                        if (screenToNavigate == null)
+                        {
+                            throw new Exception($"screen id \"{ussdForm.OnSubmit.UssdScreen.Id}\" does not exist");
+                        }
+
+                        ShowScreen(screenToNavigate);
+                    }
+                    if (ussdForm.OnSubmit.NavType== UssdNavigatorTypes.ToScript)
+                    {
+                        
+                        var script = _scripts.FirstOrDefault(s => s.Id == ussdForm.OnSubmit.Id);
+
+                        if (script==null)
+                        {
+                            throw new Exception($"script with id {ussdForm.OnSubmit.Id} not found");
+                        }
+                        ScriptOutput scriptResult;
+                        try
+                        {
+                            var scriptOptions = ScriptOptions.Default.
+                                WithReferences(_scriptAssemblies).WithImports(_scriptImports);
+
+                            var eo = new ExpandoObject();
+
+                            var eoColl = (ICollection<KeyValuePair<string, dynamic>>)eo;
+
+                            foreach (var kvp in ussdForm.BindTo.Value)
+                            {
+                                eoColl.Add(new KeyValuePair<string, dynamic>(kvp.Key, kvp.Value));
+                            }
+
+                            dynamic eoDynamic = eo;
+                            var scriptContent = script.Content;
+                            scriptContent = scriptContent.Replace(script.BindFrom + ".", "BindFrom.");
+
+                            scriptResult = CSharpScript.EvaluateAsync<ScriptOutput>(scriptContent, scriptOptions,new ScriptInput(new LussdRequestContext(), eoDynamic),typeof(ScriptInput)).Result;
+
+
+                            if (!string.IsNullOrEmpty(script.BindTo))
+                            {
+                                //var sr = JsonConvert.SerializeObject(scriptResult.Response);
+
+                                //var dictionaryOfScriptResult =
+                                //    JsonConvert.DeserializeObject<Dictionary<string, string>>(sr);
+
+                                _boundModels[script.BindTo] = scriptResult.Response;
+
+                            }
+                            if (!string.IsNullOrEmpty(scriptResult.NextScreen))
+                            {
+                                var nextScreen = _screens.FirstOrDefault(s => s.Id == scriptResult.NextScreen);
+                                if (nextScreen==null)
+                                {
+                                    throw new Exception($"unknown screen \"{scriptResult.NextScreen}\"");
+                                }
+                                ShowScreen(nextScreen);
+                                return;
+                            }
+
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception(ex.Message);
+                        }
+
+                    }
+
+                    if (ussdForm.OnSubmit.NavType== UssdNavigatorTypes.ToAction)
+                    {
+                        var actionItem = _actions.FirstOrDefault(a => a.Id ==ussdForm.OnSubmit.Id);
+                        if (actionItem == null)
+                        {
+                            throw new Exception($"undefined action {ussdForm.OnSubmit.Id}");
+                        }
+
+                        if (actionItem.Http.Cycle == UssdActionCycle.Once)
+                        {
+                            if (_boundModels[actionItem.BindTo.Name].Any()) //todo: this might not be so necessary, cos a developer may just want to call an API, no binding
+                            {
+
+                            }
+                            else
+                            {
+
+                                var actionResponse = GrabActionResponse(actionItem).Result;
+
+
+                                var bdict = new Dictionary<string, dynamic>();
+
+                                foreach (var property in actionResponse.Item2.Properties())
+                                {
+                                    bdict.Add(property.Name, property.Value);
+                                }
+
+                                ussdForm.BindTo.Value = bdict;
+
+                                _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
+
+                                Console.WriteLine("HTTP response {0}", actionResponse.Item1);
+
+                                if (actionItem.Http.Responses.Any())
+                                {
+                                    var navigatorLabel =
+                                        actionItem.Http.Responses.FirstOrDefault(
+                                            r => r.Value == (int)actionResponse.Item1);
+
+                                    if (navigatorLabel != null)
+                                    {
+                                        //todo: we need to discourage "ussd:action" for now....
+                                        //it might cause recursive actions
+                                        ShowScreen(
+                                            _screens.FirstOrDefault(
+                                                s => s.Id == navigatorLabel.Goto.Id));
+                                        return;
+                                    }
+                                }
+
+
+                            }
+
+                        }
+                        else if (actionItem.Http.Cycle == UssdActionCycle.Always)
+                        {
+
+                            //should always do fresh bind
+                            var actionResponse = GrabActionResponse(actionItem).Result;
+
+
+                            var bdict = new Dictionary<string, dynamic>();
+
+                            foreach (var property in actionResponse.Item2.Properties())
+                            {
+                                bdict.Add(property.Name, property.Value);
+                            }
+                            ussdForm.BindTo.Value = bdict;
+                            
+
+                            _boundModels[actionItem.BindTo.Name] = actionResponse.Item2;
+
+                            Console.WriteLine("HTTP response {0}", actionResponse.Item1);
+
+                            if (actionItem.Http.Responses.Any())
+                            {
+                                var navigatorLabel =
+                                    actionItem.Http.Responses.FirstOrDefault(
+                                        r => r.Value == (int)actionResponse.Item1);
+
+                                if (navigatorLabel != null)
+                                {
+                                    //todo: we need to discourage "ussd:action" for now....
+                                    ShowScreen(
+                                        _screens.FirstOrDefault(
+                                            s => s.Id == navigatorLabel.Goto.Id));
+                                    return;
+                                }
+                            }
+
+                        }
+                    }
+                    
                 }
+
+#endregion Form
             }
 
 
@@ -1022,8 +1717,6 @@ namespace XmlToUssdCompiler
                 switch (actionItem.Http.Method)
                 {
                     case UssdActionHttpMethod.Post:
-                       
-
                         result = await restClient.PostAsync(new Uri(actionItem.Http.Url), content);
                         break;
                     case UssdActionHttpMethod.Put:
@@ -1047,11 +1740,10 @@ namespace XmlToUssdCompiler
                 {
                     return resp;
                 }
+
+                
                 var serverResp = await result.Content.ReadAsStringAsync();
-
-
-                //result.EnsureSuccessStatusCode();
-
+                
                 if (result.IsSuccessStatusCode)
                 {
                     resp = new Tuple<HttpStatusCode, JObject>(HttpStatusCode.OK, JObject.Parse(serverResp));
@@ -1084,165 +1776,15 @@ namespace XmlToUssdCompiler
             return true;
         }
 
-        /*StringBuilder _codeBuilder;
-        public void GenerateUssdFile(string controllerName="")
-        {
-            var rawName = string.IsNullOrEmpty(controllerName)
-                ? Filename.Replace(".xml", string.Empty)
-                : controllerName;
-
-            var controllerFilename = rawName + "Controller";
-
-            _codeBuilder = new StringBuilder();
-
-            _codeBuilder.Append("using System;");
-            _codeBuilder.Append("using System.Threading.Tasks;");
-            _codeBuilder.Append("using Smsgh.UssdFramework;");
-            _codeBuilder.Append(string.Format("namespace {0}Library.UssdControllers", controllerFilename));
-            _codeBuilder.Append("{");
-
-
-            _codeBuilder.Append(string.Format("public class {0} : UssdController",controllerFilename));
-            _codeBuilder.Append("{");
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\t");
-
-
-
-            var firstScreen = _screens.FirstOrDefault();
-            foreach (var ussdScreen in _screens)
-            {
-                GenerateScreenCode(ussdScreen);
-                
-            }
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\t");
-            _codeBuilder.Append("}"); //end of class
-            _codeBuilder.Append("}"); //end of controller
-
-
-            var handler = BuildDynamicUssdHandler(rawName,"testroute",firstScreen.Id);
-
-
-            File.WriteAllText(controllerFilename + ".cs", _codeBuilder.ToString());
-            File.WriteAllText(string.Format("Main{0}Controller", rawName) + ".cs", handler);
-
-            BuildDll(string.Format("Main{0}Controller", rawName), string.Format("Main{0}Controller.cs", rawName),
-                controllerFilename + ".cs");
-
-
-        }
-
-        private string BuildDynamicUssdHandler(string controller,string routePrefix,string startAction)
-        {
-            var handler = new StringBuilder();
-
-            handler.Append("using System.Threading.Tasks;");
-            handler.Append("using System.Web.Http;");
-            handler.Append("using Smsgh.UssdFramework;");
-            handler.Append("using Smsgh.UssdFramework.Stores;");
-            handler.Append(string.Format("namespace {0}UssdHandler", controller));
-            handler.Append("{");
-
-            handler.Append(string.Format("[RoutePrefix(\"{0}\"),AllowAnonymous]",routePrefix));
-            handler.Append(string.Format("public class Main{0}Controller:ApiController", controller));
-            handler.Append("{");
-            handler.Append("[Route,HttpPost]");
-            handler.Append("public async Task<IHttpActionResult> Index(UssdRequest request)");
-            handler.Append("{");
-            handler.Append(string.Format(" return Ok(await Ussd.Process(new RedisStore(), request, \"{0}\", \"{1}\"));",controller,startAction));
-            handler.Append("}");
-            handler.Append("}");
-            handler.Append("}");
-
-            return handler.ToString();
-        }
-
-        private void GenerateScreenCode(UssdScreen firstScreen)
-        {
-            _codeBuilder.Append(string.Format("public async Task<UssdResponse> {0}()",firstScreen.Id));
-            _codeBuilder.Append("{");
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\t");
-            _codeBuilder.Append("\t");
-            foreach (var ussdItem in firstScreen.UssdItems)
-            {
-                if (ussdItem.GetType() == typeof(UssdMenu))
-                {
-                    var ussdMenu = (UssdMenu)ussdItem;
-                    _codeBuilder.Append(ussdMenu.ToCode());
-                }
-
-                if (ussdItem.GetType() == typeof(UssdText))
-                {
-                    var ussdText = (UssdText)ussdItem;
-
-                    _codeBuilder.Append(ussdText.ToCode(_boundModels));
-                }
-
-                if (ussdItem.GetType() == typeof(UssdForm))
-                {
-                    var ussdForm = (UssdForm)ussdItem;
-
-                    _codeBuilder.Append(ussdForm.ToCode(_formLists));
-
-               }
-            }
-
-            _codeBuilder.Append("}");
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\r\n");
-            _codeBuilder.Append("\t");
-        }
-
-        private void BuildDll(string dllname,string handlerFilename, string controllerFilename)
-        {
-            IDictionary<string, string> compParams =
-     new Dictionary<string, string>() { { "CompilerVersion", "v4.0" } };
-            CodeDomProvider codeProvider = CodeDomProvider.CreateProvider("CSharp", compParams);
-            
-            string outputDll = dllname + ".dll";
-
-            var parameters = new CompilerParameters();
-            parameters.GenerateExecutable = false;
-            parameters.OutputAssembly = outputDll;
-            
-            parameters.ReferencedAssemblies.Add(@"System.Net.Http.dll");
-            parameters.ReferencedAssemblies.Add(@"System.Net.Http.WebRequest.dll");
-            parameters.ReferencedAssemblies.Add(@"System.Net.Http.Formatting.dll");
-            parameters.ReferencedAssemblies.Add(@"System.Web.Http.dll");
-            parameters.ReferencedAssemblies.Add(@"Smsgh.UssdFramework.dll");
-
-            CompilerResults results = codeProvider.CompileAssemblyFromFile(parameters, controllerFilename, handlerFilename);
-            if (results.Errors.Count > 0)
-            {
-                Console.WriteLine("Build Failed");
-                foreach (CompilerError compErr in results.Errors)
-                {
-                    Console.WriteLine(
-                    "Line number " + compErr.Line +
-                    ", Error Number: " + compErr.ErrorNumber +
-                    ", '" + compErr.ErrorText + ";" +
-                    Environment.NewLine + Environment.NewLine);
-                }
-            }
-            else
-            {
-                Console.WriteLine("Build Succeeded");
-                //return Assembly.LoadFrom(outputDll);
-            }
-        }
-        */
+   
 
     }
 
     public enum UssdNavigatorTypes
     {
         ToScreen,
-        ToAction
-
+        ToAction,
+        ToScript
     }
 
 

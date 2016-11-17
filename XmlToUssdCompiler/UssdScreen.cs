@@ -10,6 +10,7 @@ namespace XmlToUssdCompiler
         }
 
         public string Id { get; set; }
+        public bool Main { get; set; }
 
         public override string ToString()
         {

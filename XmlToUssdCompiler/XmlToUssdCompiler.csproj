@@ -152,7 +152,12 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="LussdDynamicExpressionObject.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ScriptModels\LussdRequestContext.cs" />
+    <Compile Include="ScriptModels\ScriptInput.cs" />
+    <Compile Include="ScriptModels\ScriptInputBase.cs" />
+    <Compile Include="ScriptModels\ScriptOutput.cs" />
     <Compile Include="StringHelper.cs" />
     <Compile Include="UssdAction.cs" />
     <Compile Include="UssdActionHttp.cs" />
@@ -171,6 +176,7 @@
     <Compile Include="UssdMenuOption.cs" />
     <Compile Include="UssdNavigator.cs" />
     <Compile Include="UssdScreen.cs" />
+    <Compile Include="UssdScript.cs" />
     <Compile Include="UssdText.cs" />
     <Compile Include="UssdXml.cs" />
   </ItemGroup>

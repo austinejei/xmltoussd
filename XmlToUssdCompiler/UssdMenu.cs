@@ -9,7 +9,7 @@ namespace XmlToUssdCompiler
         {
             BindFrom = new UssdBoundModel();
             Options = new List<UssdMenuOption>();
-            BindAction = new UssdBoundAction();
+            BindAction = new UssdBoundAction("");
         }
         public UssdBoundModel BindFrom { get; set; }
         public string Title { get; set; }

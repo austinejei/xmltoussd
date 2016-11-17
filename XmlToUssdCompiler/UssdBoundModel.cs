@@ -6,9 +6,9 @@ namespace XmlToUssdCompiler
     {
         public UssdBoundModel()
         {
-            Value = new Dictionary<string, string>();
+            Value = new Dictionary<string, dynamic>();
         }
         public string Name { get; set; }
-        public Dictionary<string,string> Value { get; set; }
+        public Dictionary<string, dynamic> Value { get; set; }
     }
 }

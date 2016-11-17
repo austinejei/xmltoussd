@@ -9,7 +9,7 @@ namespace XmlToUssdCompiler
         public UssdText()
         {
             BindFrom = new UssdBoundModel();
-            BindAction = new UssdBoundAction();
+            BindAction = new UssdBoundAction("");
         }
         public string Text { get; set; }
         public UssdBoundModel BindFrom { get; set; }
@@ -19,7 +19,7 @@ namespace XmlToUssdCompiler
         {
             Text = text;
             BindFrom = new UssdBoundModel();
-            BindAction = new UssdBoundAction();
+            BindAction = new UssdBoundAction("");
         }
 
     }

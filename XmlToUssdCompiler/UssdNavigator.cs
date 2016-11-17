@@ -4,10 +4,15 @@ namespace XmlToUssdCompiler
     {
         public UssdNavigator(string pointerStream)
         {
-            if (pointerStream.Contains("ussd:action"))
+            if (pointerStream.StartsWith("ussd:action"))
             {
                 NavType = UssdNavigatorTypes.ToAction;
                 Id = pointerStream.Replace("ussd:action:", string.Empty);
+            }
+            if (pointerStream.StartsWith("ussd:script"))
+            {
+                NavType = UssdNavigatorTypes.ToScript;
+                Id = pointerStream.Replace("ussd:script:", string.Empty);
             }
             else
             {
