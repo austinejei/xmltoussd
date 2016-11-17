@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+
+  <screen id="main">
+    <form bindto="user" onsubmit="ussd:nav:finish">
+      <title>Welcome to my USSD application</title>
+      <input type="text" display="Enter your name" 
+             id="name" required="true"/>
+    </form>
+  </screen>
+
+  <screen id="finish">
+    <text bindfrom="user">
+      Your name is {user.name}
+    </text>
+  </screen>
+
+</ussd>
+

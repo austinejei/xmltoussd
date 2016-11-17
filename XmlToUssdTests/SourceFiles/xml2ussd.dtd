@@ -1,0 +1,64 @@
+﻿<!ELEMENT ussd (screen+,script*)>
+  <!ELEMENT script (#PCDATA)> <!--scripts are usually raw texts that are evaluated in the background-->
+    <!ATTLIST script id ID #REQUIRED>
+    <!ATTLIST script type (csharp) #REQUIRED>   
+    <!ATTLIST script bindfrom CDATA #IMPLIED>
+    <!ATTLIST script bindto CDATA #IMPLIED>
+    
+
+  <!ELEMENT screen (action*,(text|form|menu))>
+    <!ATTLIST screen id ID #REQUIRED>
+    <!ATTLIST screen main (true|false) #IMPLIED>
+    <!--elements under screen-->
+    <!ELEMENT text (#PCDATA)> <!--TEXT structure-->
+      <!ATTLIST text bindfrom CDATA #IMPLIED>
+      <!ATTLIST text bindaction CDATA #IMPLIED>
+
+    <!ELEMENT form (title,input+,list*)> <!--FORM structure-->
+      <!ATTLIST form bindto CDATA #REQUIRED>
+      <!ATTLIST form onsubmit CDATA #REQUIRED>
+      <!-- elements under form-->
+      <!ELEMENT input (#PCDATA)>
+        <!ATTLIST input type (text|number|money|list) #REQUIRED>
+        <!ATTLIST input id ID #REQUIRED>
+        <!ATTLIST input required (true|false) #REQUIRED>
+        <!ATTLIST input display CDATA #REQUIRED>
+        <!ATTLIST input maxlength CDATA #IMPLIED>
+        <!ATTLIST input listid CDATA #IMPLIED>
+
+      <!ELEMENT list (choice*)>
+        <!ATTLIST list id ID #REQUIRED>
+        <!ATTLIST list repeater CDATA #IMPLIED>
+      <!ELEMENT choice (#PCDATA)>
+        <!ATTLIST choice value CDATA #REQUIRED>
+        <!ATTLIST choice selector CDATA #IMPLIED> <!--though optional, if not specified, will default to 1,2,3-->
+
+    <!ELEMENT menu (title,option+)> <!--MENU structure-->
+      <!ATTLIST menu bindfrom CDATA #IMPLIED>
+      <!ATTLIST menu bindaction CDATA #IMPLIED>
+      <!--elements under MENU-->
+      <!ELEMENT title (#PCDATA)>
+      <!ELEMENT option (#PCDATA)>
+        <!ATTLIST option value CDATA #REQUIRED>
+        <!ATTLIST option onselect CDATA #REQUIRED>
+   
+    <!ELEMENT action (http)> <!--ACTION structure-->
+      <!ATTLIST action id ID #REQUIRED>
+      <!ATTLIST action bindto CDATA #IMPLIED>
+      <!ATTLIST action cycle (Once|Always) #IMPLIED>
+      <!--elements under ACTION-->
+      <!ELEMENT http (header,body*,response)>  
+        <!ATTLIST http url CDATA #REQUIRED>
+        <!ATTLIST http method (Post|Put|Get|Delete|Patch) #REQUIRED>
+        <!ELEMENT header (add+)>
+          <!ELEMENT add (#PCDATA)>
+            <!ATTLIST add key CDATA #REQUIRED>
+            <!ATTLIST add value CDATA #REQUIRED>
+
+        <!ELEMENT body (#PCDATA)>
+            <!ATTLIST body bindfrom CDATA #IMPLIED>
+
+        <!ELEMENT response (code+)>
+          <!ELEMENT code (#PCDATA)>
+            <!ATTLIST code value CDATA #REQUIRED>
+            <!ATTLIST code goto CDATA #REQUIRED>

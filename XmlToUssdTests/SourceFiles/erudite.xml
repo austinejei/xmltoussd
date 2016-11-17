@@ -1,0 +1,295 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+
+  <screen id="mainscreen">	
+		
+		<menu>
+			<title>
+					 ==Welcome to ERUDITE Mobile Banking Services==
+			</title>
+      	<option value="1"  onselect="ussd:nav:registerScreen">1. Register</option>
+			<option value="2"  onselect="ussd:nav:enquiriesScreen">2. Enquiries</option>
+			<option value="3"  onselect="ussd:nav:transfersScreen">3. Money Transfer</option>
+	  <option value="4"  onselect="ussd:nav:servicesScreen">4. Banking Services</option>
+    <option value="5"  onselect="ussd:nav:helpScreen">5. Help</option>
+
+		</menu>
+	</screen>
+
+    <screen id="registerScreen">
+    <form bindto="registerScreenData" onsubmit="ussd:nav:registerScreenFinish">
+      <title>REGISTER</title>
+
+    <input type="number" display="Create PIN" maxlength="4" id="newPin" required="true"/>
+      
+    <input type="number" display="Repeat PIN" maxlength="4" id="confirmPin" required="true"/>
+
+
+      
+    </form>
+  </screen>
+
+     <screen id="registerScreenFinish">
+    <text bindfrom="registerScreenData">
+      Registered Completed!.
+    </text>
+  </screen>
+
+   <screen id="enquiriesScreen">	
+		
+		<menu>
+			<title>
+					 Enquiries
+			</title>
+		
+      <option value="2"  onselect="ussd:nav:accountsBalances">2. Account Balance</option>
+			<option value="3"  onselect="ussd:nav:miniStatement">3. Mini Statement</option>
+	  <option value="0"  onselect="ussd:nav:mainscreen">0. Back</option>
+
+		</menu>
+	</screen>
+
+     <screen id="servicesScreen">	
+		
+		<menu>
+			<title>
+					 ERUDITE: 
+           
+           
+           Services.....
+           
+           
+           .....
+			</title>
+			<option value="1"  onselect="ussd:nav:airtimeScreen">1. Airtime</option>
+			<option value="2"  onselect="ussd:nav:dstvScreen">2. DStv/GOtv</option>
+      <option value="3"  onselect="ussd:nav:surflineScreen">3. Surfline</option>
+	  <option value="0"  onselect="ussd:nav:mainscreen">0. Back</option>
+
+		</menu>
+	</screen>
+
+  <screen id="surflineScreen">
+  <text>
+  Coming Soon!
+  </text>
+  </screen>
+
+    <screen id="dstvScreen">
+    <form bindto="dstvScreenData" onsubmit="ussd:nav:dstvScreenFinish">
+      <title>ERUDITE: DStv/GOtv</title>
+      
+
+     
+
+    <input type="text" display="Enter Account Number" 
+             id="account" required="true"/>
+
+      
+  <input type="money" display="How much are you paying?" 
+             id="amount" required="true"/>
+
+
+      <input type="number" display="Enter PIN" 
+             id="pin" required="true"/>
+    </form>
+  </screen>
+
+    <screen id="dstvScreenFinish">
+    <text bindfrom="dstvScreenData">
+      Success. You have paid GHS {dstvScreenData.amount} to {dstvScreenData.account}.
+    </text>
+  </screen>
+
+    <screen id="airtimeScreen">
+    <form bindto="airtimeScreenData" onsubmit="ussd:nav:airtimeScreenFinish">
+      <title>ERUDITE: Airtime</title>
+      
+
+      <input type="list" listid="networkList" id="selectedNetworkList" display="Select Network" required="true"/>
+
+      <list id="networkList">
+        <choice value="62001" selector="1">MTN</choice>
+ <choice value="62002" selector="2">Vodafone</choice>
+ <choice value="62003" selector="3">Airtel</choice>
+        <choice value="62004" selector="4">TIGO</choice>
+<choice value="62005" selector="5">Glo</choice>
+     <choice value="62006" selector="6">Expresso</choice>
+      </list>
+
+    <input type="text" display="Enter Recipient's Number'" 
+             id="destination" required="true" />
+
+       <input type="list" listid="amountList" id="selectedAmount" display="Select Amount" required="true"/>
+
+      <list id="amountList">
+        <choice value="5" selector="1">5</choice>
+        <choice value="10" selector="2">10</choice>
+      <choice value="20" selector="3">20</choice>
+       <choice value="50" selector="4">50</choice>
+      </list>
+
+
+
+      <input type="number" display="Enter PIN" 
+             id="pin" required="true"/>
+    </form>
+  </screen>
+
+  <screen id="airtimeScreenFinish">
+    <text bindfrom="airtimeScreenData">
+      Success. An amount of GHS {airtimeScreenData.selectedAmount} has been sent to {airtimeScreenData.destination}.
+    </text>
+  </screen>
+
+  <screen id="accountsBalances">	
+		
+		<menu>
+			<title>
+					 ERUDITE: Balances\n1. Current (****1032) = GHS 3,432\n2. Savings (****5423) = GHS 8,114
+			</title>
+	
+	  <option value="0"  onselect="ussd:nav:enquiriesScreen">0. Back</option>
+
+		</menu>
+	</screen>
+
+  <screen id="miniStatement">	
+		
+		<menu>
+			<title>
+					 ERUDITE: Mini-Statement\n1. 10/07/16 - DEB - 341.23 - CHQ (123)\n2. 11/07/16 - CRE - 60 - INTR SAV
+			</title>
+	
+	  <option value="0"  onselect="ussd:nav:enquiriesScreen">0. Back</option>
+
+		</menu>
+	</screen>
+
+  <screen id="transfersScreen">	
+		
+		<menu>
+			<title>
+					 Transfers
+			</title>
+			<option value="1"  onselect="ussd:nav:ownAccountTransferScreen">1. Own Account</option>
+			<option value="2"  onselect="ussd:nav:intraAccountTransferScreen">2. Other Account</option>
+      <option value="3"  onselect="ussd:nav:mobileMoneyTransferScreen">3. Mobile Money</option>
+	  <option value="0"  onselect="ussd:nav:mainscreen">0. Back</option>
+
+		</menu>
+	</screen>
+
+   <screen id="mobileMoneyTransferScreen">
+    <form bindto="mobileMoneyTransferScreenData" onsubmit="ussd:nav:finishMobileMoneyTransferScreen">
+      <title>Transfers: Mobile Money</title>
+      
+
+      <input type="list" listid="sourceAccountList" id="selectedSourceAccount" display="Select Source" required="true"/>
+
+      <list id="sourceAccountList">
+        <choice value="cur_1032" selector="1">Current (****1032) = GHS 3,432</choice>
+        <choice value="sav_5432" selector="2">Savings (****5423) = GHS 8,114</choice>
+     
+      </list>
+
+       <input type="list" listid="mmWalletList" id="selectedWallet" display="Select Mobile Money Provider" required="true"/>
+
+      <list id="mmWalletList">
+        <choice value="MTN" selector="1">MTN</choice>
+        <choice value="AIRTEL" selector="2">AIRTEL</choice>
+      <choice value="TIGO" selector="3">TIGO</choice>
+      </list>
+
+ <input type="text" display="Enter phone number" 
+             id="phone" required="true"/>
+
+      <input type="money" display="Enter amount" 
+             id="amount" required="true"/>
+
+      <input type="number" display="Enter PIN" 
+             id="pin" required="true"/>
+    </form>
+  </screen>
+
+   <screen id="finishMobileMoneyTransferScreen">
+    <text bindfrom="mobileMoneyTransferScreenData">
+      Success. An amount of GHS {mobileMoneyTransferScreenData.amount} has been transferred from {mobileMoneyTransferScreenData.selectedSourceAccount} to {mobileMoneyTransferScreenData.phone} on {mobileMoneyTransferScreenData.selectedWallet}.
+    </text>
+  </screen>
+
+  <screen id="ownAccountTransferScreen">
+    <form bindto="ownAccountTransferData" onsubmit="ussd:nav:finishOwnAccountTransfers">
+      <title>Transfers: Own Account</title>
+      
+
+      <input type="list" listid="sourceAccountList" id="selectedSourceAccount" display="Select Source" required="true"/>
+
+      <list id="sourceAccountList">
+        <choice value="cur_1032" selector="1">Current (****1032) = GHS 3,432</choice>
+        <choice value="sav_5432" selector="2">Savings (****5423) = GHS 8,114</choice>
+     
+      </list>
+
+       <input type="list" listid="destinationAccountList" id="selectedDestinationAccount" display="Select Destination" required="true"/>
+
+      <list id="destinationAccountList">
+        <choice value="cur_1032" selector="1">Current (****1032) = GHS 3,432</choice>
+        <choice value="sav_5432" selector="2">Savings (****5423) = GHS 8,114</choice>
+     
+      </list>
+
+      <input type="money" display="Enter amount" 
+             id="amount" required="true"/>
+
+        <input type="number" display="Enter PIN" 
+             id="pin" required="true"/>
+    </form>
+  </screen>
+
+ <screen id="finishOwnAccountTransfers">
+    <text bindfrom="ownAccountTransferData">
+      Success. An amount of GHS {ownAccountTransferData.amount} has been transferred from {ownAccountTransferData.selectedSourceAccount} to {ownAccountTransferData.selectedDestinationAccount}.
+    </text>
+  </screen>
+
+    <screen id="intraAccountTransferScreen">
+    <form bindto="intraAccountTransferData" onsubmit="ussd:nav:finishIntraAccountTransfers">
+      <title>ERUDITE: Transfers: Own Account</title>
+      
+
+      <input type="list" listid="sourceAccountList" id="selectedSourceAccount" display="Select Source" required="true"/>
+
+      <list id="sourceAccountList">
+        <choice value="cur_1032" selector="1">Current (****1032) = GHS 3,432</choice>
+        <choice value="sav_5432" selector="2">Savings (****5423) = GHS 8,114</choice>
+     
+      </list>
+
+         <input type="test" display="Enter destination Account Number" 
+             id="destinationAccount" required="true"/>
+
+      <input type="money" display="Enter amount" 
+             id="amount" required="true"/>
+
+        <input type="number" display="Enter PIN" 
+             id="pin" required="true"/>
+    </form>
+  </screen>
+
+ <screen id="finishIntraAccountTransfers">
+    <text bindfrom="intraAccountTransferData">
+      Success. An amount of GHS {intraAccountTransferData.amount} has been transferred from {intraAccountTransferData.selectedSourceAccount} to {intraAccountTransferData.selectedDestinationAccount}.
+    </text>
+  </screen>
+
+  <screen id="helpScreen">
+    <text>
+      Please call our customer care center on 0302111222. Thank you!
+    </text>
+  </screen>
+
+
+</ussd>
+

@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.24720.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XmlToUssdCompilerExe", "xmltoussd.app\XmlToUssdCompilerExe.csproj", "{2F0A1476-67A6-4A18-8329-A764BD1293A2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XmlToUssdCompiler", "XmlToUssdCompiler\XmlToUssdCompiler.csproj", "{68E87165-3E1E-4D43-A9F1-CEE513480445}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XmlToUssdTests", "XmlToUssdTests\XmlToUssdTests.csproj", "{D67438C1-13A7-48BC-8BD4-D7EFB69C5C39}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{68E87165-3E1E-4D43-A9F1-CEE513480445}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{68E87165-3E1E-4D43-A9F1-CEE513480445}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{68E87165-3E1E-4D43-A9F1-CEE513480445}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D67438C1-13A7-48BC-8BD4-D7EFB69C5C39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D67438C1-13A7-48BC-8BD4-D7EFB69C5C39}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D67438C1-13A7-48BC-8BD4-D7EFB69C5C39}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D67438C1-13A7-48BC-8BD4-D7EFB69C5C39}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
