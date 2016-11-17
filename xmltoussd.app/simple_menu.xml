@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+	<screen id="mainscreen" main="true">
+   
+		<menu>
+			<title>
+					 MAIN MENU\r\nWelcome to CashBagg	
+			</title>
+      
+			<option value="1"  onselect="ussd:nav:accountinfoscreen">1. Account Info</option>
+	
+			<option value="2"  onselect="ussd:nav:exitapp">2. Exit</option>
+
+		</menu>
+	</screen>
+
+
+  <screen id="accountinfoscreen">
+    <menu>
+      <title>
+        ACCOUNT INFO\r\nYou have GHS 34660.00 in your account
+      </title>
+      <option value="0" onselect="ussd:nav:mainscreen">0.Back</option>
+    </menu>
+  </screen>
+  
+  <screen id="exitapp" >
+    <text>
+      Goodbye
+    </text>
+  </screen>
+	
+	
+
+
+</ussd>
+

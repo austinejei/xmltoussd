@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+
+  <screen id="main" main="true">
+
+    <!-- variable declaration example
+    <data id="mydata" type="array">
+      <item>
+        <value></value>
+        <selector></selector>
+        <text></text>
+      </item>
+      <item>
+        <value></value>
+        <selector></selector>
+        <text></text>
+      </item>
+    </data>-->
+    
+    <form bindto="user" onsubmit="ussd:nav:finish">
+      <title>Welcome to my USSD application</title>
+      <input type="text" display="Enter your name" 
+             id="name" required="true"/>
+
+      <input type="list" listid="networkList" id="Network" display="Select Network" required="true"/>
+
+
+      <!--repeater example
+      
+      
+      
+      <list id="networkList" repeater="ussd:data:mydata">
+        <choice value="{mydata.value}" selector="{mydata.selector}">{mydata.text}</choice>
+        
+      </list>
+      
+      -->
+      
+      <list id="networkList">
+        <choice value="62001" selector="1">MTN</choice>
+        <choice value="62002" selector="2">Airtel</choice>
+        <choice value="62003" selector="3">Glo</choice>
+        <choice value="62004" selector="4">Vodafone</choice>
+      </list>
+    </form>
+  </screen>
+
+  <screen id="finish">
+    <text bindfrom="user">
+      Your name is {user.name}; you selected {user.Network}.
+    </text>
+  </screen>
+
+</ussd>
+

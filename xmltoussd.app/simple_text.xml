@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+	
+  <screen id="exitapp" main="true">
+    <text>
+      hello world. {Request.ServiceCode}
+    </text>
+  </screen>
+  
+</ussd>
+

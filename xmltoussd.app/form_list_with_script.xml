@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+
+  <screen id="main" main="true">
+
+ <form bindto="user" onsubmit="ussd:nav:finish">
+      <title>Welcome to my USSD application</title>
+      <input type="text" display="Enter your name" 
+             id="name" required="true"/>
+
+      <input type="list" listid="networkList" id="Network" display="Select Network" required="true"/>
+
+
+      <!--repeater example    -->
+      <list id="networkList" repeater="ussd:script:networkListScript">
+        
+      </list>
+      
+    </form>
+  </screen>
+
+  <screen id="finish">
+    <text bindfrom="user">
+      Your name is {user.name}; you selected {user.Network}.
+    </text>
+  </screen>
+
+  <script id="networkListScript" type="csharp">
+  
+    var networkListData = new[]
+    {
+    new {selector="1",value="62001",text="MTN"},
+    new {selector="2",value="62002",text="Airtel"},
+    };
+
+    
+    return new ScriptOutput{
+        Response=networkListData
+    };
+
+  </script>
+
+</ussd>
+

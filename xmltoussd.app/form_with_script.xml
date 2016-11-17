@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+
+  <screen id="mainScreen" main="true" >
+    <form bindto="user" onsubmit="ussd:script:finishScript">
+      <title>Welcome to my USSD application</title>
+      <input type="text" display="Enter your name here:" id="name" required="true"/>
+      
+    </form>
+  </screen>
+
+  <screen id="finishScreen">
+    <text bindfrom="user2">
+      Your name is {user2.name}.
+    </text>
+  </screen>
+  
+  <script id="finishScript" bindfrom="user" bindto="user2" type="csharp">
+
+
+    var userResponse = user.name + ". And today is "+ DateTime.Now.ToString("F");
+    
+    return new ScriptOutput{
+         Response=new{
+              name = userResponse
+         },
+         NextScreen = "finishScreen"
+    };
+
+  </script>
+
+</ussd>
+

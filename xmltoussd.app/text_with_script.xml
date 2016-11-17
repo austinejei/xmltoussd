@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+	
+  <screen id="mainScreen" main="true">
+    <text bindaction="ussd:script:mainScreenScript" bindfrom="resp">
+      hello world. {Request.ServiceCode}. Time is {resp}.
+    </text>
+  </screen>
+
+
+  <script id="mainScreenScript" type="csharp" bindto="resp">
+    
+      var t = Request.Mobile;
+      var timeStamp = DateTime.Now.ToString("F");
+      return new ScriptOutput{
+          Response = timeStamp
+      };
+  </script>
+</ussd>
+

@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+	<screen id="mainscreen" main="true">
+   
+		<menu  bindaction="ussd:script:firstTimeScript" bindfrom="user" >
+			<title>
+					 MAIN MENU\r\n Hello {user.name}, welcome to CashBagg	
+			</title>
+      
+			<option value="1"  onselect="ussd:nav:accountinfoscreen">1. Account Info</option>
+	
+			<option value="2"  onselect="ussd:nav:exitapp">2. Exit</option>
+
+		</menu>
+	</screen>
+
+
+  <screen id="accountinfoscreen">
+    <menu bindfrom="user">
+      <title>
+        ACCOUNT INFO\r\nYou have GHS {user.accountbalance} in your account
+      </title>
+      <option value="0" onselect="ussd:nav:mainscreen">0.Back</option>
+    </menu>
+  </screen>
+  
+  <screen id="exitapp" >
+    <text bindfrom="user">
+      Goodbye, {user.name}
+    </text>
+  </screen>
+
+  <script id="firstTimeScript" type="csharp" bindto="user">
+
+    return new ScriptOutput{
+        Response=new{
+          name = "Gyawu",
+          accountbalance = 52068
+        }
+    };
+  </script>
+	
+
+
+</ussd>
+

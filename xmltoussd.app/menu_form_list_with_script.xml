@@ -1,0 +1,233 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ussd SYSTEM "xml2ussd.dtd">
+<ussd>
+	<screen id="mainscreen" main="true">
+   
+		<menu  bindaction="ussd:script:mainScreenScript" bindfrom="user" >
+			<title>
+        MAIN MENU\r\n Hello {user.AccountId}, welcome to CashBagg
+      </title>
+      
+			<option value="1"  onselect="ussd:nav:busy4gScreen">1. Buy BUSY 4G Bundle ({user.AccountStatus})</option>
+	
+			<option value="2"  onselect="ussd:nav:exitScreen">2. Exit</option>
+
+		</menu>
+	</screen>
+
+
+  <screen id="busy4gScreen">
+    <form bindto="busyAccount" onsubmit="ussd:nav:confirmScreen">
+      <title>BUSY 4G Bundle</title>
+      <input type="number" display="Enter your account number"
+             id="account" required="true"/>
+     <input type="list" listid="bundleList" id="bundle" display="Select Bundle" required="true"/>
+
+   <list id="bundleList" repeater="ussd:script:queryBusy4gScript">
+        
+      </list>
+    </form>
+  </screen>
+  
+  <screen id="confirmScreen">
+   
+		<menu  bindaction="ussd:script:confirmScreenScript" bindfrom="busyAccountFormatted" >
+			<title>
+        CONFIRM\r\n Are you sure you want to buy {busyAccountFormatted.SelectedBundle.ShortName} at GHS {busyAccountFormatted.SelectedBundle.Value} for {busyAccountFormatted.Firstname} {busyAccountFormatted.Lastname} ({busyAccountFormatted.Msisdn})?
+      </title>
+      
+			<option value="1"  onselect="ussd:script:buyBusyBundleScript">1. YES - {busyAccountFormatted.SelectedBundle.ShortName}</option>
+	
+			<option value="2"  onselect="ussd:nav:mainscreen">2. NO</option>
+
+		</menu>
+	</screen>
+      
+   <screen id="busyPaymentCompleted" >
+    <text bindfrom="busyPurchaseResponse">
+      Completed. Transaction ID is {busyPurchaseResponse.Id}
+    </text>
+  </screen>
+
+  <screen id="serviceDownScreen" >
+    <text>
+      Service down. Please try again later.
+    </text>
+  </screen>
+  
+  
+  <screen id="exitScreen" >
+    <text bindfrom="user">
+      Goodbye, {user.AccountId}
+    </text>
+  </screen>
+
+  <script id="buyBusyBundleScript" type="csharp" bindto="busyPurchaseResponse" bindfrom="busyAccountFormatted">
+    string responseString = string.Empty;
+
+    try{
+    using(var client = new HttpClient()){
+    client.DefaultRequestHeaders.Clear();
+    client.DefaultRequestHeaders.Add("Authorization","Basic ZHlreXVuenM6a29kd3l6aGw=");
+
+    HttpContent content = new StringContent(JsonConvert.SerializeObject(new{
+    account = busyAccountFormatted.Msisdn,
+    token = "c81f1a54-2431-48d6-8772-ee9aa300d063",
+    amount = busyAccountFormatted.SelectedBundle.Value,
+    bundle = busyAccountFormatted.SelectedBundle.Bundle
+    }),System.Text.Encoding.UTF8,"application/json");
+
+    var resp = client.PostAsync(new Uri("http://api.smsgh.com/usp/test/busy"),content).Result;
+
+    if(!resp.IsSuccessStatusCode){
+    return new ScriptOutput{
+    Response = null,
+    NextScreen = "serviceDownScreen"
+    };
+    }
+
+    responseString = resp.Content.ReadAsStringAsync().Result;
+
+    }
+    }
+    catch(Exception e){
+    return new ScriptOutput{
+    Response = e.Message,
+    NextScreen = "serviceDownScreen"
+    };
+    }
+
+    return new ScriptOutput{
+    NextScreen = "busyPaymentCompleted",
+    Response=JObject.Parse(responseString)
+    };
+
+  </script>
+
+  <script id="confirmScreenScript" type="csharp" bindto="busyAccountFormatted" bindfrom="busyAccount">
+
+    var selectedBundleDetail = JObject.Parse(busyAccount.bundle);
+
+    return new ScriptOutput{
+    
+    Response=selectedBundleDetail
+    };
+  </script>
+  
+  <script id="mainScreenScript" type="csharp" bindto="user">
+
+    string responseString = string.Empty;
+
+    try{
+    using(var client = new HttpClient()){
+    client.DefaultRequestHeaders.Clear();
+    client.DefaultRequestHeaders.Add("Authorization","Basic ZHlreXVuenM6a29kd3l6aGw=");
+    var resp = client.GetAsync(new Uri("http://api.smsgh.com/v3/account/profile")).Result;
+
+    if(!resp.IsSuccessStatusCode){
+    return new ScriptOutput{
+    Response = null,
+    NextScreen = "serviceDownScreen"
+    };
+    }
+
+    responseString = resp.Content.ReadAsStringAsync().Result;
+
+    }
+    }
+    catch(Exception e){
+    return new ScriptOutput{
+    Response = null,
+    NextScreen = "serviceDownScreen"
+    };
+    }
+
+
+
+    return new ScriptOutput{
+    Response=JObject.Parse(responseString)
+    };
+  </script>
+
+  <script id="queryBusy4gScript" type="csharp" bindto="busyQueryOutput" bindfrom="busyAccount">
+
+    public class BusyQueryDetail{
+    public BusyQueryDetail(){
+
+    Bundles = new List&lt;BusyBundle&gt;();
+
+        }
+        public string Msisdn {get;set;}
+        public string Firstname {get;set;}
+        public string Lastname {get;set;}
+        public List&lt;BusyBundle&gt; Bundles {get;set;}
+          }
+
+    
+        public class BusyBundle{
+        public string Value{get;set;}
+        public string ShortName{get;set;}
+        public string Name{get;set;}
+        public string Bundle{get;set;}
+        }
+        
+        public class LussdListItem{
+        public string value{get;set;}
+        public string selector{get;set;}
+        public string text{get;set;}
+        
+        }
+
+        string responseString = string.Empty;
+
+        try{
+        using(var client = new HttpClient()){
+        client.DefaultRequestHeaders.Clear();
+        client.DefaultRequestHeaders.Add("Authorization","Basic ZHlreXVuenM6a29kd3l6aGw=");
+        var resp = client.GetAsync(new Uri("http://api.smsgh.com/usp/test/busy?account=" + busyAccount.account)).Result;
+
+        if(!resp.IsSuccessStatusCode){
+        return new ScriptOutput{
+        Response = null,
+        NextScreen = "serviceDownScreen"
+        };
+        }
+
+        responseString = resp.Content.ReadAsStringAsync().Result;
+
+        }
+        }
+        catch(Exception e){
+        return new ScriptOutput{
+        Response = e.Message,
+        NextScreen = "serviceDownScreen"
+        };
+        }
+
+      var accountDetails = JsonConvert.DeserializeObject&lt;BusyQueryDetail&gt;(responseString);
+      
+      int i=0;
+      
+      var lussdList = new List&lt;LussdListItem&gt;();
+      
+      foreach(var c in accountDetails.Bundles){
+        i++;
+        lussdList.Add(new LussdListItem{
+             selector = (i).ToString(),
+              text = c.ShortName,
+              //value = c.Bundle + ":" + c.Value + ":" + c.ShortName
+              value = JsonConvert.SerializeObject(new{accountDetails.Firstname,accountDetails.Lastname,accountDetails.Msisdn, SelectedBundle=c})
+            });
+       
+      }
+      
+          
+             
+    return new ScriptOutput{
+    Response= lussdList
+    };
+  </script>
+
+
+</ussd>
+
